@@ -14,6 +14,7 @@
   dim = NULL,
   method = "mean_var",
   style = 1,
+  min_max = TRUE,
   verb = TRUE,
   force = FALSE,
   cores = 1,
@@ -28,6 +29,7 @@
   dim = NULL,
   method = "mean_var",
   style = 1,
+  min_max = TRUE,
   verb = TRUE,
   force = FALSE,
   cores = 1,
@@ -42,6 +44,7 @@
   dim = NULL,
   method = "mean_var",
   style = 1,
+  min_max = TRUE,
   verb = TRUE,
   force = FALSE,
   cores = 1,
@@ -79,6 +82,9 @@ This argument is only used when \code{style = 1} and the emulator input is at le
 
 \item{style}{either \code{1} or \code{2}, indicating two different types of validation plots.}
 
+\item{min_max}{a bool indicating if min-max normalization will be used to scale the testing output, RMSE, predictive mean and std from the
+emulator. Defaults to \code{TRUE}.}
+
 \item{verb}{a bool indicating if the trace information on plotting will be printed during the function execution.
 Defaults to \code{TRUE}.}
 
@@ -111,7 +117,7 @@ is invoked, unnecessary evaluations of repetitive LOO or OOS validation will not
 are already stored in \code{x}, unless \code{x_test} and \code{y_test} are identical to those used by \code{\link[=validate]{validate()}}, \code{\link[=plot]{plot()}} will re-evaluate OOS
 validations before plotting.
 \item Any R vector detected in \code{x_test} and \code{y_test} will be treated as a column vector and automatically converted into a single-column
-R matrix.
+R matrix. Thus, if \code{x_test} or \code{y_test} is a single testing data point with multiple dimensions, it must be given as a matrix.
 \item The returned \code{patchwork} object contains the \code{ggplot2} objects. One can modify the included individual ggplots
 by accessing them with double-bracket indexing. See \url{https://patchwork.data-imaginist.com/} for further information.
 }

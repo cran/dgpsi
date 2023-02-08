@@ -342,7 +342,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 <p>This vignette shows how to use the package to emulate a feed-forward
-system of two synthetic computer models.</p>
+system of three synthetic computer models.</p>
 <div id="load-the-package" class="section level2">
 <h2>Load the package</h2>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dgpsi)</span>
@@ -419,7 +419,8 @@ emulate the Model 2:</p>
 <pre><code>## Auto-generating a 2-layered DGP structure ... done
 ## Initializing the DGP emulator ... done
 ## Training the DGP emulator:
-## Iteration 500: Layer 2: 100%|██████████| 500/500 [00:02&lt;00:00, 232.30it/s]</code></pre>
+## Iteration 500: Layer 2: 100%|██████████| 500/500 [00:02&lt;00:00, 232.30it/s]
+## Imputing ... done</code></pre>
 <p>Since all outputs of emulators in the first layer is from
 <code>m1</code> and <code>m2</code> uses the output from <code>m1</code>
 as its input, we set <code>linked_idx = c(1)</code> in
@@ -440,7 +441,8 @@ to emulate the Model 3:</p>
 <pre><code>## Auto-generating a 3-layered DGP structure ... done
 ## Initializing the DGP emulator ... done
 ## Training the DGP emulator:
-## Iteration 500: Layer 3: 100%|██████████| 500/500 [00:06&lt;00:00, 72.56it/s]</code></pre>
+## Iteration 500: Layer 3: 100%|██████████| 500/500 [00:06&lt;00:00, 72.56it/s]
+## Imputing ... done</code></pre>
 <p>Since <code>m3</code> takes both outputs from <code>m1</code> in
 layer 1 and <code>m2</code> in layer 2, we set
 <code>linked_idx = list( c(1), c(1) )</code>. The first vector in the

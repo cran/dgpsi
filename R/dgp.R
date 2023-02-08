@@ -10,10 +10,12 @@
 #'     The final layer of the DGP structure (i.e., the final sub-list in `struc`) can be a likelihood
 #'     layer that contains a likelihood function (e.g., [Poisson()]). When `struc = NULL`,
 #'     the DGP structure is automatically generated and can be checked by applying [summary()] to the output from [dgp()] with `training = FALSE`.
-#'     If this argument is used (i.e., user provides a customized DGP structure), arguments `depth`, `name`, `lengthscale`, `nugget_est`, `nugget`,
-#'     `connect`, `likelihood`, and `internal_input_idx` will NOT be used. Defaults to `NULL`.
+#'     If this argument is used (i.e., user provides a customized DGP structure), arguments `depth`, `node`, `name`, `lengthscale`, `bounds`, `prior`,
+#'     `share`, `nugget_est`, `nugget`, `scale_est`, `scale`, `connect`, `likelihood`, and `internal_input_idx` will NOT be used. Defaults to `NULL`.
 #' @param depth number of layers (including the likelihood layer) for a DGP structure. `depth` must be at least `2`.
 #'     Defaults to `2`. This argument is only used when `struc = NULL`.
+#' @param node number of GP nodes in each layer (except for the final layer or the layer feeding the likelihood node) of the DGP. Defaults to
+#'    `ncol(X)`. This argument is only used when `struc = NULL`.
 #' @param name kernel function to be used. Either `"sexp"` for squared exponential kernel or
 #'     `"matern2.5"` for Matérn-2.5 kernel. Defaults to `"sexp"`. This argument is only used when `struc = NULL`.
 #' @param lengthscale initial lengthscales for GP nodes in the DGP emulator. It can be a single numeric value or a vector:
@@ -22,6 +24,19 @@
 #'    The vector should have a length of `depth` if `likelihood = NULL` or a length of `depth - 1` if `likelihood` is not `NULL`.
 #'
 #' Defaults to a numeric value of `1.0`. This argument is only used when `struc = NULL`.
+#' @param bounds the lower and upper bounds of lengthscales in GP nodes. It can be a vector or a matrix:
+#' 1. if it is a vector, the lower bound (the first element of the vector) and upper bound (the second element of the vector) will be applied to
+#'    lengthscales for all GP nodes in the DGP hierarchy.
+#' 2. if it is a matrix, each row of the matrix specifies the lower and upper bounds of lengthscales for all GP nodes in the corresponding layer.
+#'    The matrix should have its row number equal to `depth` if `likelihood = NULL` or to `depth - 1` if `likelihood` is not `NULL`.
+#'
+#' Defaults to `NULL` where no bounds are specified for the lengthscales. This argument is only used when `struc = NULL`.
+#' @param prior prior to be used for Maximum a Posterior for lengthscales and nuggets of all GP nodes in the DGP hierarchy:
+#' * gamma prior (`"ga"`),
+#' * inverse gamma prior (`"inv_ga"`), or
+#' * jointly robust prior (`"ref"`).
+#'
+#' Defaults to `"ga"`. This argument is only used when `struc = NULL`.
 #' @param share a bool indicating if all input dimensions of a GP node share a common lengthscale. Defaults to `TRUE`. This argument is only used when `struc = NULL`.
 #' @param nugget_est a bool or a bool vector that indicates if the nuggets of GP nodes (if any) in the final layer are to be estimated. If a single bool is
 #'     provided, it will be applied to all GP nodes (if any) in the final layer. If a bool vector (which must have a length of `ncol(Y)`) is provided, each
@@ -30,13 +45,27 @@
 #' * `TRUE`: the nugget of the corresponding GP in the final layer will be estimated with the initial value given by the correspondence in `nugget` (see below).
 #'
 #' Defaults to `FALSE`. This argument is only used when `struc = NULL`.
-#' @param nugget the initial nugget value(s) of GP nodes (if any) in the final layer. If it is a single numeric value, it will be applied to all GP nodes (if any)
+#' @param nugget the initial nugget value(s) of GP nodes (if any) in each layer:
+#' 1. if it is a single numeric value, the value will be applied as the initial nugget for all GP nodes in the DGP hierarchy.
+#' 2. if it is a vector, each element of the vector specifies the initial nugget that will be applied to all GP nodes in the corresponding layer.
+#'    The vector should have a length of `depth` if `likelihood = NULL` or a length of `depth - 1` if `likelihood` is not `NULL`.
+#'
+#' Set `nugget` to a small value and the bools in `nugget_est` to `FASLE` for deterministic emulations where the emulator
+#'    interpolates the training data points. Set `nugget` to a reasonable larger value and the bools in `nugget_est` to `TRUE` for stochastic emulations where
+#'    the computer model outputs are assumed to follow a homogeneous Gaussian distribution. Defaults to `1e-6` if `nugget_est = FALSE` and
+#'    `0.01` if `nugget_est = TRUE`. This argument is only used when `struc = NULL`.
+#' @param scale_est a bool or a bool vector that indicates if variance of GP nodes (if any) in the final layer are to be estimated. If a single bool is
+#'     provided, it will be applied to all GP nodes (if any) in the final layer. If a bool vector (which must have a length of `ncol(Y)`) is provided, each
+#'     bool element in the vector will be applied to the corresponding GP node (if any) in the final layer. The value of a bool has following effects:
+#' * `FALSE`: the variance of the corresponding GP in the final layer is fixed to the corresponding value defined in `scale` (see below).
+#' * `TRUE`: the variance of the corresponding GP in the final layer will be estimated with the initial value given by the correspondence in `scale` (see below).
+#'
+#' Defaults to `TRUE`. This argument is only used when `struc = NULL`.
+#' @param scale the initial variance value(s) of GP nodes (if any) in the final layer. If it is a single numeric value, it will be applied to all GP nodes (if any)
 #'    in the final layer. If it is a vector (which must have a length of `ncol(Y)`), each numeric in the vector will be applied to the corresponding GP node
-#'    (if any) in the final layer. Set `nugget` to a small value and the corresponding bool in `nugget_est` to `FASLE` for deterministic emulations where the emulator
-#'    interpolates the training data points. Set `nugget` to a reasonable larger value and the corresponding bool in `nugget_est` to `TRUE` for stochastic emulations where
-#'    the computer model outputs are assumed to follow a homogeneous Gaussian distribution. Defaults to `1e-6`. This argument is only used when `struc = NULL`.
-#' @param connect a bool indicating whether to implement global input connection to the DGP structure. Defaults to `TRUE`.
-#'     This argument is only used when `struc = NULL`.
+#'    (if any) in the final layer. Defaults to `1`. This argument is only used when `struc = NULL`.
+#' @param connect a bool indicating whether to implement global input connection to the DGP structure. Setting it to `FALSE` may produce a better emulator in some cases at
+#'    the cost of slower training. Defaults to `TRUE`. This argument is only used when `struc = NULL`.
 #' @param likelihood the likelihood type of a DGP emulator:
 #' 1. `NULL`: no likelihood layer is included in the emulator.
 #' 2. `"Hetero"`: a heteroskedastic Gaussian likelihood layer is added for stochastic emulation where the computer model outputs are assumed to follow a heteroskedastic Gaussian distribution
@@ -44,7 +73,7 @@
 #' 3. `"Poisson"`: a Poisson likelihood layer is added for stochastic emulation where the computer model outputs are assumed to a Poisson distribution.
 #' 4. `"NegBin"`: a negative Binomial likelihood layer is added for stochastic emulation where the computer model outputs are assumed to follow a negative Binomial distribution.
 #'
-#' When `likelihood` is not `NULL`, the values of `nugget_est` and `nugget` are overridden by `FALSE` and `1e-6` respectively. Defaults to `NULL`. This argument is only used when `struc = NULL`.
+#' When `likelihood` is not `NULL`, the value of `nugget_est` is overridden by `FALSE`. Defaults to `NULL`. This argument is only used when `struc = NULL`.
 #' @param training a bool indicating if the initialized DGP emulator will be trained.
 #'     When set to `FALSE`, [dgp()] returns an untrained DGP emulator, to which one can apply [summary()] to inspect its specifications
 #'     (especially when a customized `struc` is provided) or apply [predict()] to check its emulation performance before the training. Defaults to `TRUE`.
@@ -64,8 +93,8 @@
 #'     point estimates of model parameters. Must be smaller than the training iterations `N`. If this is not specified, only the last 25% of iterations
 #'     are used. Defaults to `NULL`. This argument is only used when `training = TRUE`.
 #' @param B the number of imputations to produce the later predictions. Increase the value to account for
-#'     more imputation uncertainties. Decrease the value for lower imputation uncertainties but faster predictions.
-#'     Defaults to `50`.
+#'     more imputation uncertainties with slower predictions. Decrease the value for lower imputation uncertainties but faster predictions.
+#'     Defaults to `30`.
 #' @param internal_input_idx column indices of `X` that are generated by the linked emulators in the preceding layers.
 #'     Set `internal_input_idx = NULL` if the DGP emulator is in the first layer of a system or all columns in `X` are
 #'     generated by the linked emulators in the preceding layers. Defaults to `NULL`. This argument is only used when `struc = NULL`.
@@ -87,7 +116,8 @@
 #' Set `linked_idx = NULL` if the DGP emulator will not be used for linked emulations. However, if this is no longer the case, one can use [set_linked_idx()]
 #' to add linking information to the DGP emulator. Defaults to `NULL`.
 #'
-#' @return An S3 class named `dgp` that contains three slots:
+#' @return An S3 class named `dgp` that contains four slots:
+#' * `data`: a list that contains two elements: `X` and `Y` which are the training input and output data respectively.
 #' * `constructor_obj`: a 'python' object that stores the information of the constructed DGP emulator.
 #' * `container_obj`: a 'python' object that stores the information for the linked emulation.
 #' * `emulator_obj`: a 'python' object that stores the information for the predictions from the DGP emulator.
@@ -98,10 +128,11 @@
 #' * [validate()] for LOO and OOS validations.
 #' * [plot()] for validation plots.
 #' * [lgp()] for linked (D)GP emulator constructions.
+#' * [design()] for sequential designs.
 #'
 #' @details See further examples and tutorials at <https://mingdeyu.github.io/dgpsi-R/> and learn how to customize a DGP structure.
 #' @note Any R vector detected in `X` and `Y` will be treated as a column vector and automatically converted into a single-column
-#'     R matrix.
+#'     R matrix. Thus, if `X` is a single data point with multiple dimensions, it must be given as a matrix.
 #' @examples
 #' \dontrun{
 #'
@@ -131,6 +162,9 @@
 #' # trace plot
 #' trace_plot(m)
 #'
+#' # trim the traces of model parameters
+#' m <- window(m, 800)
+#'
 #' # LOO cross validation
 #' m <- validate(m)
 #' plot(m)
@@ -150,9 +184,10 @@
 #' }
 #' @md
 #' @export
-dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0, share = TRUE,
-                nugget_est = FALSE, nugget = 1e-6, connect = TRUE, likelihood = NULL, training =TRUE, verb = TRUE, check_rep = TRUE, rff = FALSE, M = NULL, N = 500, ess_burn = 10,
-                burnin = NULL, B = 50, internal_input_idx = NULL, linked_idx = NULL) {
+dgp <- function(X, Y, struc = NULL, depth = 2, node = ncol(X), name = 'sexp', lengthscale = 1.0, bounds = NULL, prior = 'ga', share = TRUE,
+                nugget_est = FALSE, nugget = ifelse(all(nugget_est), 0.01, 1e-6), scale_est = TRUE, scale = 1., connect = TRUE,
+                likelihood = NULL, training =TRUE, verb = TRUE, check_rep = TRUE, rff = FALSE, M = NULL, N = 500, ess_burn = 10,
+                burnin = NULL, B = 30, internal_input_idx = NULL, linked_idx = NULL) {
 
   if ( !is.matrix(X)&!is.vector(X) ) stop("'X' must be a vector or a matrix.", call. = FALSE)
   if ( !is.matrix(Y)&!is.vector(Y) ) stop("'Y' must be a vector or a matrix.", call. = FALSE)
@@ -163,6 +198,11 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
 
   n_dim_X <- ncol(X)
   n_dim_Y <- ncol(Y)
+
+  if ( name!='sexp' & name!='matern2.5' ) stop("'name' can only be either 'sexp' or 'matern2.5'.", call. = FALSE)
+  if ( !is.null(likelihood) ){
+    if (likelihood!='Hetero' &  likelihood!='Poisson' & likelihood!='NegBin' ) stop("The provided 'likelihood' is not supported.", call. = FALSE)
+  }
 
   N <- as.integer(N)
   B <- as.integer(B)
@@ -200,6 +240,16 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
         }
       }
 
+      if ( !is.null(bounds) ){
+        if ( is.vector(bounds) ) {
+          bounds <- matrix(rep(bounds, depth), ncol = 2,  byrow = TRUE)
+        } else {
+          if ( nrow(bounds)!=depth ) {
+            stop(sprintf("nrow(bounds) must equal to %i.", depth), call. = FALSE)
+          }
+        }
+      }
+
       if ( length(nugget_est)==1 ) {
         nugget_est <- rep(nugget_est, n_dim_Y)
       } else {
@@ -208,11 +258,35 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
         }
       }
 
+      #if ( length(nugget)==1 ) {
+      #  nugget <- rep(nugget, n_dim_Y)
+      #} else {
+      #  if ( length(nugget)!=n_dim_Y ) {
+      #    stop(sprintf("length(nugget) should equal to %i.", n_dim_Y), call. = FALSE)
+      #  }
+      #}
+
       if ( length(nugget)==1 ) {
-        nugget <- rep(nugget, n_dim_Y)
+        nugget <- rep(nugget, depth)
       } else {
-        if ( length(nugget)!=n_dim_Y ) {
-          stop(sprintf("length(nugget) should equal to %i.", n_dim_Y), call. = FALSE)
+        if ( length(nugget)!=depth ) {
+          stop(sprintf("length(nugget) must equal to %i.", depth), call. = FALSE)
+        }
+      }
+
+      if ( length(scale_est)==1 ) {
+        scale_est <- rep(scale_est, n_dim_Y)
+      } else {
+        if ( length(scale_est)!=n_dim_Y ) {
+          stop(sprintf("length(scale_est) should equal to %i.", n_dim_Y), call. = FALSE)
+        }
+      }
+
+      if ( length(scale)==1 ) {
+        scale <- rep(scale, n_dim_Y)
+      } else {
+        if ( length(scale)!=n_dim_Y ) {
+          stop(sprintf("length(scale) should equal to %i.", n_dim_Y), call. = FALSE)
         }
       }
 
@@ -221,17 +295,52 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
       if ( length(lengthscale)==1 ) {
         lengthscale <- rep(lengthscale, depth-1)
       } else {
-        if ( length(lengthscale)!=depth-1 ) {
+        if ( length(lengthscale)!=(depth-1) ) {
           stop(sprintf("length(lengthscale) must equal to %i.", depth-1), call. = FALSE)
         }
       }
 
+      if ( length(nugget)==1 ) {
+        nugget <- rep(nugget, depth-1)
+      } else {
+        if ( length(nugget)!=(depth-1) ) {
+          stop(sprintf("length(nugget) must equal to %i.", depth-1), call. = FALSE)
+        }
+      }
+
+      if ( !is.null(bounds) ){
+        if ( is.vector(bounds) ) {
+          bounds <- matrix(rep(bounds, depth-1), ncol = 2,  byrow = TRUE)
+        } else {
+          if ( nrow(bounds)!=(depth-1) ) {
+            stop(sprintf("nrow(bounds) must equal to %i.", depth-1), call. = FALSE)
+          }
+        }
+      }
+
       if ( likelihood == 'Hetero'|likelihood == 'NegBin' ) {
-        nugget <- rep(1e-6, 2)
+        #nugget <- rep(1e-6, 2)
         nugget_est <- rep(FALSE, 2)
+        if ( length(scale_est)==1 ) {
+          scale_est <- rep(scale_est, 2)
+        } else {
+          if ( length(scale_est)!=2 ) {
+            stop(sprintf("length(scale_est) should equal to %i.", 2), call. = FALSE)
+          }
+        }
+
+        if ( length(scale)==1 ) {
+          scale <- rep(scale, 2)
+        } else {
+          if ( length(scale)!=2 ) {
+            stop(sprintf("length(scale) should equal to %i.", 2), call. = FALSE)
+          }
+        }
       } else if ( likelihood == 'Poisson' ) {
-        nugget <- 1e-6
+        #nugget <- 1e-6
         nugget_est <- FALSE
+        if ( length(scale_est)!=1 ) stop(sprintf("length(scale_est) should equal to %i.", 1), call. = FALSE)
+        if ( length(scale)!=1 ) stop(sprintf("length(scale) should equal to %i.", 1), call. = FALSE)
       }
 
       if ( n_dim_Y != 1 ) {
@@ -261,10 +370,16 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
       layer_l <- list()
 
       if( l == no_gp_layer ) {
-        no_kerenl <- length(nugget)
+        no_kerenl <- length(nugget_est)
         } else {
-          no_kerenl <- n_dim_X
-       }
+          no_kerenl <- node
+        }
+
+      if ( is.null(bounds) ){
+        bds <- NULL
+      } else {
+        bds <- reticulate::np_array(bounds[l,])
+      }
 
       for ( k in 1:no_kerenl ) {
         if ( l == no_gp_layer ) {
@@ -274,24 +389,29 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
             } else {
               length_scale <- rep(lengthscale[l], n_dim_X)
             }
-            layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), name = name, scale_est = TRUE, nugget = nugget[k], nugget_est = nugget_est[k],
+            layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), bds = bds, name = name, prior_name = prior, scale = scale[k], scale_est = scale_est[k], nugget = nugget[l], nugget_est = nugget_est[k],
                                                  input_dim = internal_input_idx, connect = external_input_idx)
           } else {
             if ( connect ) {
               if ( isTRUE(share) ){
                 length_scale <- lengthscale[l]
               } else {
-                length_scale <- rep(lengthscale[l], 2*n_dim_X)
+                length_scale <- rep(lengthscale[l], n_dim_X+node)
               }
-              layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), name = name, scale_est = TRUE, nugget = nugget[k], nugget_est = nugget_est[k],
-                                                   connect = reticulate::np_array(as.integer(1:n_dim_X - 1)))
+              connect_info <- as.integer(1:n_dim_X - 1)
+              if (!is.null(internal_input_idx)){
+                idx <- reticulate::py_to_r(internal_input_idx)+1
+                connect_info <- c(connect_info[idx],connect_info[-idx])
+              }
+              layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), bds = bds, name = name, prior_name = prior, scale = scale[k], scale_est = scale_est[k], nugget = nugget[l], nugget_est = nugget_est[k],
+                                                   connect = reticulate::np_array(connect_info) )
             } else {
               if ( isTRUE(share) ){
                 length_scale <- lengthscale[l]
               } else {
-                length_scale <- rep(lengthscale[l], n_dim_X)
+                length_scale <- rep(lengthscale[l], node)
               }
-              layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), name = name, scale_est = TRUE, nugget = nugget[k], nugget_est = nugget_est[k])
+              layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), bds = bds, name = name, prior_name = prior, scale = scale[k], scale_est = scale_est[k], nugget = nugget[l], nugget_est = nugget_est[k])
             }
           }
         } else {
@@ -301,24 +421,29 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
               } else {
                 length_scale <- rep(lengthscale[l], n_dim_X)
               }
-              layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), name = name,
+              layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), bds = bds, name = name, prior_name = prior, nugget = nugget[l],
                                                    input_dim = internal_input_idx, connect = external_input_idx)
             } else {
               if ( connect ) {
                 if ( isTRUE(share) ){
                   length_scale <- lengthscale[l]
                 } else {
-                  length_scale <- rep(lengthscale[l], 2*n_dim_X)
+                  length_scale <- rep(lengthscale[l], n_dim_X+node)
                 }
-                layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), name = name,
-                                                     connect = reticulate::np_array(as.integer(1:n_dim_X - 1)))
+                connect_info <- as.integer(1:n_dim_X - 1)
+                if (!is.null(internal_input_idx)){
+                  idx <- reticulate::py_to_r(internal_input_idx)+1
+                  connect_info <- c(connect_info[idx],connect_info[-idx])
+                }
+                layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), bds = bds, name = name, prior_name = prior, nugget = nugget[l],
+                                                     connect = reticulate::np_array(connect_info))
               } else {
                 if ( isTRUE(share) ){
                   length_scale <- lengthscale[l]
                 } else {
-                  length_scale <- rep(lengthscale[l], n_dim_X)
+                  length_scale <- rep(lengthscale[l], node)
                 }
-                layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), name = name)
+                layer_l[[k]] <- pkg.env$dgpsi$kernel(length = reticulate::np_array(length_scale), bds = bds, name = name, prior_name = prior, nugget = nugget[l])
               }
             }
           }
@@ -362,14 +487,18 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
     est_obj <- obj$estimate(NULL)
   }
 
+  if ( isTRUE(verb) ) message("Imputing ...", appendLF = FALSE)
   emu_obj <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B)
 
   res <- list()
+  res[['data']][['X']] <- unname(X)
+  res[['data']][['Y']] <- unname(Y)
   res[['constructor_obj']] <- obj
   res[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx)
   res[['emulator_obj']] <- emu_obj
 
   class(res) <- "dgp"
+  if ( isTRUE(verb) ) message(" done")
   return(res)
 }
 
@@ -392,12 +521,18 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
 #'     so-far implemented. If this is not specified, only the last 25% of iterations
 #'     are used. This overrides the value of `burnin` set in [dgp()]. Defaults to `NULL`.
 #' @param B the number of imputations to produce the predictions. Increase the value to account for
-#'     more imputation uncertainties. This overrides the value of `B` set in [dgp()]. Defaults to `50`.
+#'     more imputation uncertainties. This overrides the value of `B` set in [dgp()] if `B` is not
+#'     `NULL`. Defaults to `NULL`.
 #'
 #' @return An updated `object`.
 #'
 #' @details See further examples and tutorials at <https://mingdeyu.github.io/dgpsi-R/>.
-#' @note One can also use this function to fit an untrained DGP emulator constructed by [dgp()] with `training = FALSE`.
+#' @note
+#' * One can also use this function to fit an untrained DGP emulator constructed by [dgp()] with `training = FALSE`.
+#' * The following slots:
+#'   - `loo` and `oos` created by [validate()]; and
+#'   - `results` created by [predict()]
+#'   in `object` will be removed and not contained in the returned object.
 #' @examples
 #' \dontrun{
 #'
@@ -406,12 +541,16 @@ dgp <- function(X, Y, struc = NULL, depth = 2, name = 'sexp', lengthscale = 1.0,
 #' @md
 #' @export
 
-continue <- function(object, N = 500, ess_burn = 10, verb = TRUE, burnin = NULL, B = 50) {
+continue <- function(object, N = 500, ess_burn = 10, verb = TRUE, burnin = NULL, B = NULL) {
   if ( !inherits(object,"dgp") ){
     stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
   }
   N <- as.integer(N)
-  B <- as.integer(B)
+  if ( is.null(B) ){
+    B <- as.integer(length(object$emulator_obj$all_layer_set))
+  } else {
+    B <- as.integer(B)
+  }
   ess_burn <- as.integer(ess_burn)
 
   if( !is.null(burnin) ) {
@@ -426,13 +565,19 @@ continue <- function(object, N = 500, ess_burn = 10, verb = TRUE, burnin = NULL,
   }
 
   linked_idx <- object$container_obj$local_input_idx
-  object$constructor_obj$train(N, ess_burn, disable)
-  est_obj <- object$constructor_obj$estimate(burnin)
+  constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
+  constructor_obj_cp$train(N, ess_burn, disable)
+  est_obj <- constructor_obj_cp$estimate(burnin)
 
+  if ( isTRUE(verb) ) message("Imputing ...", appendLF = FALSE)
   new_object <- list()
-  new_object[['constructor_obj']] <- object$constructor_obj
+  new_object[['data']][['X']] <- object$data$X
+  new_object[['data']][['Y']] <- object$data$Y
+  new_object[['constructor_obj']] <- constructor_obj_cp
   new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B)
   new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx)
+  if ( "design" %in% names(object) ) new_object[['design']] <- object$design
   class(new_object) <- "dgp"
+  if ( isTRUE(verb) ) message(" done")
   return(new_object)
 }

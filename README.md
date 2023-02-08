@@ -1,44 +1,82 @@
 # dgpsi
-<!-- badges: start -->
+  [![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/dgpsi)](https://CRAN.R-project.org/package=dgpsi)
+  [![Download](https://cranlogs.r-pkg.org/badges/grand-total/dgpsi?color=brightgreen)](https://CRAN.R-project.org/package=dgpsi)
   [![R-CMD-check](https://github.com/mingdeyu/dgpsi_R/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/mingdeyu/dgpsi-R/actions/workflows/R-CMD-check.yaml)
-  ![GitHub](https://img.shields.io/github/license/mingdeyu/DGP)
-  [![DOI](https://img.shields.io/badge/DOI-10.1137%2F20M1323771-informational)](https://epubs.siam.org/doi/abs/10.1137/20M1323771)
-<!-- badges: end -->
+  [![DOC](https://img.shields.io/badge/DOC-release-brightgreen)](https://mingdeyu.github.io/dgpsi-R/)
+  [![REF](https://img.shields.io/badge/REF-Linked%20GP-informational)](https://doi.org/10.1137/20M1323771)
+  [![REF](https://img.shields.io/badge/REF-Deep%20GP-informational)](https://doi.org/10.1080/00401706.2022.2124311)
+  [![python](https://img.shields.io/badge/Python-dgpsi%20v2.1.6-informational)](https://github.com/mingdeyu/DGP)
+  ![CRAN_License](https://img.shields.io/cran/l/dgpsi?color=green)
   
-The R package `dgpsi` provides R interface to Python package [`dgpsi`](https://github.com/mingdeyu/DGP) for deep and linked Gaussian process emulations. The package currently has following features:
+The R package `dgpsi` provides R interface to Python package [`dgpsi`](https://github.com/mingdeyu/DGP) for deep and linked Gaussian process emulations. 
 
-* Deep Gaussian process emulation with flexible architecture construction: 
+> **Hassle-free Python Setup**  
+> You don't need prior knowledge of Python to start using the package, all you need is a single click in R (see [Installation](#installation) section below) that automatically installs and activates the required Python environment for you!
+
+## Features
+`dgpsi` currently has following features:
+
+* Gaussian process emulations with separable or non-separable squared exponential and Mat&eacute;rn-2.5 kernels.
+* Deep Gaussian process emulations with flexible structures including: 
     - multiple layers;
     - multiple GP nodes;
     - separable or non-separable squared exponential and Mat&eacute;rn-2.5 kernels;
     - global input connections;
-    - non-Gaussian likelihoods (Poisson, Negative-Binomial, heteroskedastic Gaussian, and more to come);
-* Linked emulation of feed-forward systems of computer models:
-    - linking GP emulators of deterministic individual computer models;
-    - linking GP and DGP emulators of deterministic individual computer models;
-* Multi-core predictions from GP, DGP, and Linked (D)GP emulators.
+    - non-Gaussian likelihoods (Poisson, Negative-Binomial, and heteroskedastic Gaussian).
+* Linked emulations of feed-forward systems of computer models by linking (D)GP emulators of deterministic individual computer models.
 * Fast Leave-One-Out (LOO) and Out-Of-Sample (OOS) validations for GP, DGP, and linked (D)GP emulators.
+* Multi-core predictions and validations for GP, DGP, and Linked (D)GP emulators.
+* Sequential designs for (D)GP emulators and bundles of (D)GP emulators.
 
-## Documentation
-See [https://mingdeyu.github.io/dgpsi-R](https://mingdeyu.github.io/dgpsi-R/) to learn more about the package.
+## Getting started
+* Check [A Quick Guide to dgpsi](https://mingdeyu.github.io/dgpsi-R/articles/dgpsi.html) to get started with the package.
+* For experimental features, check out our [website](https://mingdeyu.github.io/dgpsi-R/dev/) for the development version.
 
 ## Installation
-You can install development version of the package from the GitHub repo:
+You can install the package from CRAN:
 
-1. In your RStudio Console, type:
+```r
+install.packages('dgpsi')
+```
+
+or its development version from GitHub:
+
 ```r
 devtools::install_github('mingdeyu/dgpsi-R')
 ```
 
-2. Restart your RStudio.
+After the installation, run 
 
-3. Load the package and initialize the required Python environment:
 ```r
 library(dgpsi)
 init_py()
 ```
 
-## References
-> [Ming, D., Williamson, D., and Guillas, S. (2022) Deep Gaussian process emulation using stochastic imputation. <i>Technometrics</i> (to appear).](https://arxiv.org/abs/2107.01590)
+to install and activate the required Python environment. That's it, the package is now ready to use!
 
-> [Ming, D. and Guillas, S. (2021) Linked Gaussian process emulation for systems of computer models using Mat&eacute;rn kernels and adaptive design, <i>SIAM/ASA Journal on Uncertainty Quantification</i>. 9(4), 1615-1642.](https://epubs.siam.org/doi/abs/10.1137/20M1323771)
+> **Note**  
+> Always run `init_py()` after `library(dgpsi)`, telling R to invoke the required Python environment.
+> 
+> If you experience issues while running `init_py()`, please try to reinstall the Python environment:    
+> 
+> ```{r}
+> dgpsi::init_py(reinstall = T)
+> ```
+> 
+> or uninstall completely the Python environment:
+> 
+> ```r
+> dgpsi::init_py(uninstall = T)
+> ```
+> 
+> And then restart the R and rerun:
+>
+> ```r
+> library(dgpsi)
+> init_py()
+> ```
+
+## References
+> [Ming, D., Williamson, D., and Guillas, S. (2022) Deep Gaussian process emulation using stochastic imputation. <i>Technometrics</i>. 0(0), 1-12.](https://doi.org/10.1080/00401706.2022.2124311)
+
+> [Ming, D. and Guillas, S. (2021) Linked Gaussian process emulation for systems of computer models using Mat&eacute;rn kernels and adaptive design, <i>SIAM/ASA Journal on Uncertainty Quantification</i>. 9(4), 1615-1642.](https://doi.org/10.1137/20M1323771)

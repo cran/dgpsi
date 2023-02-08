@@ -49,7 +49,7 @@ knitr::opts_chunk$set(
 #  lo <- mu - 2*sd
 #  
 #  plot(test_x, mu, type = 'l', lty = 2, lwd = 1.5, col = 'black', xlab = 'x', cex.axis = 1.3, cex.lab = 1.3, ylab = 'y', ylim = c(-1.5,1.5))  # predictive means
-#  polygon(c(test_x, rev(test_x)), c(up,rev(lo)), col = 'grey80', border = F) # predictive bounds
+#  polygon(c(test_x, rev(test_x)), c(up,rev(lo)), col = 'grey80', border = F) # credible interval
 #  lines(test_x, test_y, type = 'l', col = "#D55E00", lwd = 2) # Underlying truth
 #  lines(test_x, mu, type = 'l', lty = 2, lwd = 1.5, col = 'black')
 #  lines(X, Y, type = 'p', pch = 16, cex = 1, col = "#0072B2") # Training data points

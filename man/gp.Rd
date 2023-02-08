@@ -9,9 +9,13 @@ gp(
   Y,
   struc = NULL,
   name = "sexp",
-  lengthscale = rep(0.2, ncol(X)),
+  lengthscale = rep(0.1, ncol(X)),
+  bounds = NULL,
+  prior = "ref",
   nugget_est = FALSE,
-  nugget = 1e-06,
+  nugget = ifelse(nugget_est, 0.01, 1e-08),
+  scale_est = TRUE,
+  scale = 1,
   training = TRUE,
   verb = TRUE,
   internal_input_idx = NULL,
@@ -25,7 +29,7 @@ gp(
 
 \item{struc}{an object produced by \code{\link[=kernel]{kernel()}} that gives a user-defined GP specifications. When \code{struc = NULL},
 the GP specifications are automatically generated using information provided in \code{name}, \code{lengthscale},
-\code{nugget_est}, \code{nugget}, and \code{internal_input_idx}. Defaults to \code{NULL}.}
+\code{nugget_est}, \code{nugget}, \code{scale_est}, \code{scale},and \code{internal_input_idx}. Defaults to \code{NULL}.}
 
 \item{name}{kernel function to be used. Either \code{"sexp"} for squared exponential kernel or
 \code{"matern2.5"} for Matérn-2.5 kernel. Defaults to \code{"sexp"}. This argument is only used when \code{struc = NULL}.}
@@ -36,7 +40,15 @@ the GP specifications are automatically generated using information provided in 
 \item if it is a vector (which must have a length of \code{ncol(X)}), it is assumed that kernel functions across input dimensions have different lengthscales.
 }
 
-Defaults to a vector of 0.2. This argument is only used when \code{struc = NULL}.}
+Defaults to a vector of \code{0.1}. This argument is only used when \code{struc = NULL}.}
+
+\item{bounds}{the lower and upper bounds of lengthscales in the kernel function. It is a vector of length two where the first element is
+the lower bound and the second element is the upper bound. The bounds will be applied to all lengthscales in the kernel function. Defaults
+to \code{NULL} where no bounds are specified for the lengthscales. This argument is only used when \code{struc = NULL}.}
+
+\item{prior}{prior to be used for Maximum a Posterior for lengthscales and nugget of the GP: gamma prior (\code{"ga"}), inverse gamma prior (\code{"inv_ga"}),
+or jointly robust prior (\code{"ref"}). Defaults to \code{"ref"}. This argument is only used when \code{struc = NULL}. See the reference below for the jointly
+robust prior.}
 
 \item{nugget_est}{a bool indicating if the nugget term is to be estimated:
 \enumerate{
@@ -47,10 +59,21 @@ Defaults to a vector of 0.2. This argument is only used when \code{struc = NULL}
 Defaults to \code{FALSE}. This argument is only used when \code{struc = NULL}.}
 
 \item{nugget}{the initial nugget value. If \code{nugget_est = FALSE}, the assigned value is fixed during the training.
-Set \code{nugget} to a small value (e.g., \code{1e-6}) and the corresponding bool in \code{nugget_est} to \code{FASLE} for deterministic emulations where the emulator
+Set \code{nugget} to a small value (e.g., \code{1e-8}) and the corresponding bool in \code{nugget_est} to \code{FASLE} for deterministic emulations where the emulator
 interpolates the training data points. Set \code{nugget} to a reasonable larger value and the corresponding bool in \code{nugget_est} to \code{TRUE} for stochastic
-emulations where the computer model outputs are assumed to follow a homogeneous Gaussian distribution. Defaults to \code{1e-6}. This argument is only used
-when \code{struc = NULL}.}
+emulations where the computer model outputs are assumed to follow a homogeneous Gaussian distribution. Defaults to \code{1e-8} if \code{nugget_est = FALSE} and
+\code{0.01} if \code{nugget_est = TRUE}. This argument is only used when \code{struc = NULL}.}
+
+\item{scale_est}{a bool indicating if the variance is to be estimated:
+\enumerate{
+\item \code{FALSE}: the variance is fixed to \code{scale}.
+\item \code{TRUE}: the variance term will be estimated.
+}
+
+Defaults to \code{TRUE}. This argument is only used when \code{struc = NULL}.}
+
+\item{scale}{the initial variance value. If \code{scale_est = FALSE}, the assigned value is fixed during the training.
+Defaults to \code{1}. This argument is only used when \code{struc = NULL}.}
 
 \item{training}{a bool indicating if the initialized GP emulator will be trained.
 When set to \code{FALSE}, \code{\link[=gp]{gp()}} returns an untrained GP emulator, to which one can apply \code{\link[=summary]{summary()}} to inspect its specifications
@@ -82,8 +105,9 @@ Set \code{linked_idx = NULL} if the GP emulator will not be used for linked emul
 to add linking information to the GP emulator. Defaults to \code{NULL}.}
 }
 \value{
-An S3 class named \code{gp} that contains three slots:
+An S3 class named \code{gp} that contains four slots:
 \itemize{
+\item \code{data}: a list that contains two elements: \code{X} and \code{Y} which are the training input and output data respectively.
 \item \code{constructor_obj}: a 'python' object that stores the information of the constructed GP emulator.
 \item \code{container_obj}: a 'python' object that stores the information for the linked emulation.
 \item \code{emulator_obj}: a 'python' object that stores the information for the predictions from the GP emulator.
@@ -95,6 +119,7 @@ The returned \code{gp} object can be used by
 \item \code{\link[=validate]{validate()}} for LOO and OOS validations.
 \item \code{\link[=plot]{plot()}} for validation plots.
 \item \code{\link[=lgp]{lgp()}} for linked (D)GP emulator constructions.
+\item \code{\link[=design]{design()}} for sequential designs.
 }
 }
 \description{
@@ -105,7 +130,7 @@ See further examples and tutorials at \url{https://mingdeyu.github.io/dgpsi-R/}.
 }
 \note{
 Any R vector detected in \code{X} and \code{Y} will be treated as a column vector and automatically converted into a single-column
-R matrix.
+R matrix. Thus, if \code{X} is a single data point with multiple dimensions, it must be given as a matrix.
 }
 \examples{
 \dontrun{
@@ -147,4 +172,7 @@ write(m, 'step_gp')
 m <- read('step_gp')
 }
 
+}
+\references{
+Gu, M. (2019). Jointly robust prior for Gaussian stochastic process in emulation, calibration and variable selection. \emph{Bayesian Analysis}, \strong{14(3)}, 857-885.
 }
