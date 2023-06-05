@@ -5,9 +5,6 @@ knitr::opts_chunk$set(
 )
 
 ## -----------------------------------------------------------------------------
-#  devtools::install_github('mingdeyu/dgpsi-R')
-
-## -----------------------------------------------------------------------------
 #  library(tidyverse)
 #  library(lhs)
 #  library(ggplot2)
@@ -28,7 +25,9 @@ knitr::opts_chunk$set(
 #    scale_fill_continuous(type = "viridis")
 
 ## -----------------------------------------------------------------------------
-#  set.seed(99)
+#  set_seed(99)
+
+## -----------------------------------------------------------------------------
 #  X <- maximinLHS(5,2)
 #  Y <- f(X)
 
@@ -100,10 +99,10 @@ knitr::opts_chunk$set(
 #  m4 <- validate(m4, x_test = validate_x, y_test = validate_y, verb = F)
 #  rmse4 <- m4$oos$rmse
 #  # create a dataframe that stores the RMSEs of the four DGP emulators
-#  rmse_static <- data.frame('N' = c(10, 20, 30, 40), 'rmse' = c(rmse1, rmse2, rmse3, rmse4), 'design' = c('lhd-10', 'lhd-20', 'lhd-30', 'lhd-40'))
+#  rmse_static <- data.frame('N' = c(10, 20, 30, 40), 'rmse' = c(rmse1, rmse2, rmse3, rmse4), 'LHD' = c('lhd-10', 'lhd-20', 'lhd-30', 'lhd-40'))
 
 ## -----------------------------------------------------------------------------
 #  draw(m, 'rmse', log = T) +
-#    geom_point(data = rmse_static, mapping = aes(x = N, y = rmse, group = design, shape = design), color = '#E69F00', size = 1.5) +
+#    geom_point(data = rmse_static, mapping = aes(x = N, y = rmse, group = LHD, shape = LHD), color = '#E69F00', size = 1.5) +
 #    scale_shape_manual(values = c(2, 3, 4, 8))
 

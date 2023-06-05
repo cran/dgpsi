@@ -22,6 +22,9 @@ knitr::opts_chunk$set(
 #  plot(X, Y, pch = 16, cex = 1, xlab = 'Time', ylab = 'Acceleration', cex.axis = 1.3, cex.lab = 1.3)
 
 ## -----------------------------------------------------------------------------
+#  set_seed(99)
+
+## -----------------------------------------------------------------------------
 #  test_idx <- sample(seq_len(length(X)), size = 20)
 #  
 #  train_X <- X[-test_idx]

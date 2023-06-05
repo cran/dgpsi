@@ -128,6 +128,8 @@ pack <- function(...) {
   res[['data']][['X']] <- X_all
   res[['data']][['Y']] <- Y_all
   class(res) <- "bundle"
+  pkg.env$py_gc$collect()
+  gc(full=T)
   return(res)
 }
 
@@ -163,6 +165,8 @@ unpack <- function(object) {
     res[[paste('emulator', i, sep="")]]$container_obj <- pkg.env$copy$deepcopy(res[[paste('emulator', i, sep="")]]$container_obj)
     res[[paste('emulator', i, sep="")]]$emulator_obj <- pkg.env$copy$deepcopy(res[[paste('emulator', i, sep="")]]$emulator_obj)
   }
+  pkg.env$py_gc$collect()
+  gc(full=T)
   return(res)
 }
 
@@ -192,6 +196,29 @@ write <- function(object, pkl_file) {
   pkg.env$dgpsi$write(lst, pkl_file)
 }
 
+#' @title Random seed generator
+#'
+#' @description This function initializes a random number generator that sets the random seed in both R and Python
+#'    to ensure reproducible results from the package.
+#'
+#' @param seed a single integer value.
+#'
+#' @return No return value.
+#'
+#' @details See further examples and tutorials at <https://mingdeyu.github.io/dgpsi-R/>.
+#' @examples
+#' \dontrun{
+#'
+#' # See dgp() for an example.
+#' }
+#' @md
+#' @export
+set_seed <- function(seed) {
+  seed <- as.integer(seed)
+  set.seed(seed)
+  reticulate::py_set_seed(seed, disable_hash_randomization = TRUE)
+  pkg.env$dgpsi$nb_seed(seed)
+}
 
 #' @title Load the stored emulator
 #'
@@ -307,7 +334,12 @@ summary.lgp <- function(object, ...) {
 #' @export
 set_linked_idx <- function(object, idx) {
   idx <- reticulate::np_array(as.integer(idx - 1))
+  object[['constructor_obj']] <- pkg.env$copy$deepcopy(object[['constructor_obj']])
+  object[['emulator_obj']] <- pkg.env$copy$deepcopy(object[['emulator_obj']])
+  object[['container_obj']] <- pkg.env$copy$deepcopy(object[['container_obj']])
   object$container_obj$set_local_input(idx)
+  pkg.env$py_gc$collect()
+  gc(full=T)
   return(object)
 }
 
@@ -346,16 +378,19 @@ set_imp <- function(object, B = 10) {
   linked_idx <- object$container_obj$local_input_idx
   constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
   burnin <- constructor_obj_cp$burnin
+  isblock <- constructor_obj_cp$block
   est_obj <- constructor_obj_cp$estimate(burnin)
 
   new_object <- list()
   new_object[['data']][['X']] <- object$data$X
   new_object[['data']][['Y']] <- object$data$Y
   new_object[['constructor_obj']] <- constructor_obj_cp
-  new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B)
-  new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx)
+  new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B, block = isblock)
+  new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx, isblock)
   if ( "design" %in% names(object) ) new_object[['design']] <- object$design
   class(new_object) <- "dgp"
+  pkg.env$py_gc$collect()
+  gc(full=T)
   return(new_object)
 }
 
@@ -405,12 +440,13 @@ window <- function(object, start, end = NULL, thin = 1) {
 
   linked_idx <- object$container_obj$local_input_idx
   constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
+  isblock <- constructor_obj_cp$block
   niter <- constructor_obj_cp$N + 1
   if ( is.null(end) ) end <- niter
   if (end > niter) end <- niter
   idx <- start:end
   idx <- idx[idx %% thin == 0]
-  constructor_obj_cp$N <- length(idx) - 1
+  constructor_obj_cp$N <- as.integer(length(idx) - 1)
   for ( l in 1:constructor_obj_cp$n_layer ){
     n_kernel <- length(constructor_obj_cp$all_layer[[l]])
     for (k in 1:n_kernel){
@@ -432,10 +468,12 @@ window <- function(object, start, end = NULL, thin = 1) {
   new_object[['data']][['X']] <- object$data$X
   new_object[['data']][['Y']] <- object$data$Y
   new_object[['constructor_obj']] <- constructor_obj_cp
-  new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B)
-  new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx)
+  new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B, block = isblock)
+  new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx, isblock)
   if ( "design" %in% names(object) ) new_object[['design']] <- object$design
   class(new_object) <- "dgp"
+  pkg.env$py_gc$collect()
+  gc(full=T)
   return(new_object)
 }
 
