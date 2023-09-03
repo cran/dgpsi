@@ -35,14 +35,16 @@
 #'   of next design points from `x_cand`.
 #' * If `object` is an instance of the `dgp` class, a matrix is returned with row number equal to `batch_size` and column number equal to one (if `aggregate`
 #'   is not `NULL`) or the output dimension (if `aggregate` is `NULL`), giving positions (i.e., row numbers) of next design points from `x_cand` to be added
-#'   to the DGP emulator across different outputs.
+#'   to the DGP emulator across different outputs. If `object` is a DGP emulator with either `Hetero` or `NegBin` likelihood layer, the returned matrix has
+#'   two columns with the first column giving positions of next design points from `x_cand` that correspond to the mean parameter of the normal or negative Binomial
+#'   distribution, and the second column giving positions of next design points from `x_cand` that correspond to the variance parameter of the normal distribution or
+#'   the dispersion parameter of the negative Binomial distribution.
 #' * If `object` is an instance of the `bundle` class, a matrix is returned with row number equal to `batch_size` and column number equal to the number of
 #'   emulators in the bundle, giving positions (i.e., row numbers) of next design points from `x_cand` to be added to individual emulators.
 #'
 #' @note
 #' * The column order of the first argument of `aggregate` must be consistent with the order of emulator output dimensions (if `object` is an instance of the
 #'     `dgp` class), or the order of emulators placed in `object` if `object` is an instance of the `bundle` class;
-#' * The function is only applicable to DGP emulators without likelihood layers.
 #' * Any R vector detected in `x_cand` will be treated as a column vector and automatically converted into a single-column
 #'   R matrix.
 #' @references
@@ -56,7 +58,6 @@
 #' # load packages and the Python env
 #' library(lhs)
 #' library(dgpsi)
-#' init_py()
 #'
 #' # construct a 1D non-stationary function
 #' f <- function(x) {
@@ -101,6 +102,10 @@ mice <- function(object, x_cand, ...){
 #' @method mice gp
 #' @export
 mice.gp <- function(object, x_cand, batch_size = 1, nugget_s = 1e-6, workers = 1, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"gp") ) stop("'object' must be an instance of the 'gp' class.", call. = FALSE)
   training_input <- object$data$X
@@ -156,11 +161,15 @@ mice.gp <- function(object, x_cand, batch_size = 1, nugget_s = 1e-6, workers = 1
 #' @method mice dgp
 #' @export
 mice.dgp <- function(object, x_cand, batch_size = 1, nugget_s = 1e-6, workers = 1, threading = FALSE, aggregate = NULL, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"dgp") ) stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
-  if ( object$constructor_obj$all_layer[[object$constructor_obj$n_layer]][[1]]$type == 'likelihood' ){
-    stop("The function is only applicable to DGP emulators without likelihood layers.", call. = FALSE)
-  }
+  #if ( object$constructor_obj$all_layer[[object$constructor_obj$n_layer]][[1]]$type == 'likelihood' ){
+  #  stop("The function is only applicable to DGP emulators without likelihood layers.", call. = FALSE)
+  #}
   object$emulator_obj$set_nb_parallel(threading)
   training_input <- object$data$X
   training_output <- object$data$Y
@@ -264,6 +273,10 @@ mice.dgp <- function(object, x_cand, batch_size = 1, nugget_s = 1e-6, workers = 
 #' @method mice bundle
 #' @export
 mice.bundle <- function(object, x_cand, batch_size = 1, nugget_s = 1e-6, workers = 1, threading = FALSE, aggregate = NULL, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"bundle") ) stop("'object' must be an instance of the 'bundle' class.", call. = FALSE)
   #check no of emulators
@@ -306,7 +319,7 @@ mice.bundle <- function(object, x_cand, batch_size = 1, nugget_s = 1e-6, workers
         } else {
           res = obj_i$emulator_obj$pmetric(x_cand = x_cand, method = 'MICE', nugget_s = nugget_s, score_only = TRUE, core_num = workers)
         }
-        scores <- cbind(scores, res)
+        scores <- cbind(scores, if(ncol(res) == 1) res else rowMeans(res))
       }
     }
 

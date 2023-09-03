@@ -34,6 +34,10 @@
 #'   - a list with the first element being the output matrix described above and, optionally, additional named elements which will update values
 #'     of any arguments with the same names passed via `...`. The list output can be useful if some additional arguments of `f` and `aggregate`
 #'     need to be updated after each step of the sequential design.
+#' @param reps an integer that gives the number of repetitions of the located design points to be created and used for evaluations of `f`. Set the
+#'     argument to an integer greater than `1` if `f` is a stochastic function that can generate different responses given a same input and the
+#'     supplied emulator `object` can deal with stochastic responses, e.g., a (D)GP emulator with `nugget_est = TRUE` or a DGP emulator with a
+#'     likelihood layer. The argument is only used when `f` is supplied. Defaults to `1`.
 #' @param freq a vector of two integers with the first element giving the frequency (in number of steps) to re-fit the
 #'     emulator, and the second element giving the frequency to implement the emulator validation (for RMSE). Defaults to `c(1, 1)`.
 #' @param x_test a matrix (with each row being an input testing data point and each column being an input dimension) that gives the testing
@@ -45,6 +49,10 @@
 #'   output dimensions.
 #'
 #' Set to `NULL` for the LOO-based emulator validation. Defaults to `NULL`. This argument is only used if `eval = NULL`.
+#' @param reset a bool or a vector of bools indicating whether to reset hyperparameters of the emulator to their initial values when it was initially
+#'     constructed after the input-output update and before the re-fit. If a bool is given, it will be applied to
+#'     every step of the sequential design. If a vector is provided, its length should be equal to `N` and will be applied to individual
+#'     steps of the sequential design. Defaults to `FALSE`.
 #' @param target a numeric or a vector that gives the target RMSEs at which the sequential design is terminated. Defaults to `NULL`, in which
 #'     case the sequential design stops after `N` steps. See *Note* section below for further information about `target`.
 #' @param method an R function that give indices of designs points in a candidate set. The function must satisfy the following basic rules:
@@ -63,7 +71,7 @@
 #'     points to be added to individual emulators in the bundle.
 #'
 #' See [alm()], [mice()], and [pei()] for examples on customizing `method`. Defaults to [mice()].
-#' @param eval an R function that calculates the customized evaluating metric of the emulator.The function must satisfy the following basic rules:
+#' @param eval an R function that calculates the customized evaluating metric of the emulator. The function must satisfy the following basic rules:
 #' * the first argument is an emulator object that can be either an instance of
 #'   - the `gp` class (produced by [gp()]);
 #'   - the `dgp` class (produced by [dgp()]);
@@ -81,7 +89,7 @@
 #' @param check_point a vector of integers that indicates at which steps the sequential design will pause and ask for the confirmation
 #'     from the user if the sequential design should continue or be terminated. Set to `NULL` to suspend the manual intervention. Defaults
 #'     to `NULL`.
-#' @param cores an integers that gives the number of cores to be used for emulator validations. If set to `NULL`, the number of cores is
+#' @param cores an integer that gives the number of cores to be used for emulator validations. If set to `NULL`, the number of cores is
 #'     set to `(max physical cores available - 1)`. Defaults to `1`. This argument is only used if `eval = NULL`.
 #' @param train_N an integer or a vector of integers that gives the number of training iterations to be used to re-fit the DGP emulator at each step
 #'     of the sequential design:
@@ -120,7 +128,7 @@
 #'
 #' See *Note* section below for further information.
 #' @note
-#' * The re-fitting and validation of an emulator are forced after the final step of a sequential design even `N` is not multiples of elements in `freq`.
+#' * The validation of an emulator is forced after the final step of a sequential design even `N` is not multiples of the second element in `freq`.
 #' * Any `loo` or `oos` slot that already exists in `object` will be cleaned, and a new slot called `loo` or `oos` will be created in the returned object
 #'   depending on whether `x_test` and `y_test` are provided. The new slot gives the validation information of the emulator constructed in the final step of
 #'   the sequential design. See [validate()] for more information about the slots `loo` and `oos`.
@@ -156,7 +164,6 @@
 #' # load packages and the Python env
 #' library(lhs)
 #' library(dgpsi)
-#' init_py()
 #'
 #' # construct a 2D non-stationary function that takes a matrix as the input
 #' f <- function(x) {
@@ -203,18 +210,24 @@
 #' @md
 #' @name design
 #' @export
-design <- function(object, N, x_cand, y_cand, n_cand, limits, int, f, freq, x_test, y_test, target, method, eval, verb, check_point, cores, ...){
+design <- function(object, N, x_cand, y_cand, n_cand, limits, int, f, reps, freq, x_test, y_test, reset, target, method, eval, verb, check_point, cores, ...){
   UseMethod("design")
 }
 
 #' @rdname design
 #' @method design gp
 #' @export
-design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, limits = NULL, int = FALSE, f = NULL, freq = c(1, 1), x_test = NULL, y_test = NULL, target = NULL, method = mice, eval = NULL, verb = TRUE, check_point = NULL, cores = 1, ...) {
+design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, limits = NULL, int = FALSE, f = NULL, reps = 1, freq = c(1, 1), x_test = NULL, y_test = NULL, reset = FALSE, target = NULL, method = mice, eval = NULL, verb = TRUE, check_point = NULL, cores = 1, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"gp") ) stop("'object' must be an instance of the 'gp' class.", call. = FALSE)
 
   N <- check_N(N)
+  reps <- check_reps(reps)
   freq <- check_freq(freq)
+  reset <- check_reset(reset, N)
   n_cand <- check_n_cand(n_cand)
   if (!is.null(x_test) & !is.null(y_test)) {
     xy_test <- check_xy_test(x_test, y_test)
@@ -331,18 +344,18 @@ design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, lim
           res <- do.call(method, c(arg_list, mparam))
         }
 
-        new_X <- x_cand[res,,drop=F]
-
         if ( verb ) {
           message(" done")
-          if ( nrow(new_X)==1 ){
-            message(paste(c(" * Next design point:", sprintf("%.06f", new_X[1,])), collapse=" "))
+          if ( length(res)==1 ){
+            message(paste(c(" * Next design point:", sprintf("%.06f", x_cand[res,])), collapse=" "))
           } else {
-            for (j in 1:nrow(new_X) ){
-              message(paste(c(sprintf(" * Next design point (Position%i):", j), sprintf("%.06f", new_X[j,])), collapse=" "))
+            for (j in 1:length(res) ){
+              message(paste(c(sprintf(" * Next design point (Position%i):", j), sprintf("%.06f", x_cand[res[j],])), collapse=" "))
             }
           }
         }
+
+        new_X <- x_cand[rep(res, reps),,drop=F]
 
         N_acq <- c(N_acq, nrow(new_X))
 
@@ -365,13 +378,13 @@ design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, lim
           Y <- rbind(Y, new_output)
         }
 
-        if ( i %% freq[1]==0 | i==N){
+        if ( i %% freq[1]==0 ){
           if ( verb ) message(" - Updating and re-fitting ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = TRUE, verb = FALSE)
+          object <- update(object, X, Y, refit = TRUE, reset = reset[i], verb = FALSE)
           if ( verb ) message(" done")
         } else {
           if ( verb ) message(" - Updating ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = FALSE, verb = FALSE)
+          object <- update(object, X, Y, refit = FALSE, reset = reset[i], verb = FALSE)
           if ( verb ) Sys.sleep(0.5)
           if ( verb ) message(" done")
         }
@@ -431,7 +444,15 @@ design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, lim
     add_arg <- list(...)
     xy_cand_list <- check_xy_cand(x_cand, y_cand, n_dim_Y)
     xy_cand_list <- remove_dup(xy_cand_list, X)
-    x_cand <- xy_cand_list[[1]]
+    x_cand_origin <- xy_cand_list[[1]]
+    x_cand_rep <- pkg.env$np$unique(x_cand_origin, return_inverse=TRUE, axis=0L)
+    if ( nrow(x_cand_rep[[1]])==nrow(x_cand_origin) ){
+      x_cand <- x_cand_origin
+      is.dup <- FALSE
+    } else {
+      x_cand <- x_cand_rep[[1]]
+      is.dup <- TRUE
+    }
     y_cand <- xy_cand_list[[2]]
     idx_x_cand0 <- c(1:nrow(x_cand))
     idx_x_cand <- idx_x_cand0
@@ -483,7 +504,9 @@ design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, lim
     if ( run ){
       for ( i in 1:N ){
         if ( n_cand<=length(idx_x_cand) ){
-          idx_sub_cand <- sample(idx_x_cand, n_cand, replace = FALSE)
+          idx_idx <- suppressPackageStartupMessages(clhs::clhs(as.data.frame(x_cand[idx_x_cand,,drop = FALSE]), size = n_cand, progress = FALSE, simple = TRUE))
+          idx_sub_cand <- idx_x_cand[idx_idx]
+          #idx_sub_cand <- sample(idx_x_cand, n_cand, replace = FALSE)
         } else {
           idx_sub_cand <- idx_x_cand
         }
@@ -503,33 +526,43 @@ design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, lim
           res <- do.call(method, c(arg_list, mparam))
         }
 
-        new_X <- sub_cand[res,,drop=F]
-
         if ( verb ) {
           message(" done")
-          if ( nrow(new_X)==1 ){
-            message(paste(c(" * Next design point:", sprintf("%.06f", new_X[1,])), collapse=" "))
+          if ( length(res)==1 ){
+            message(paste(c(" * Next design point:", sprintf("%.06f", sub_cand[res,])), collapse=" "))
           } else {
-            for (j in 1:nrow(new_X) ){
-              message(paste(c(sprintf(" * Next design point (Position%i):", j), sprintf("%.06f", new_X[j,])), collapse=" "))
+            for (j in 1:length(res) ){
+              message(paste(c(sprintf(" * Next design point (Position%i):", j), sprintf("%.06f", sub_cand[res[j],])), collapse=" "))
             }
           }
         }
 
-        N_acq <- c(N_acq, nrow(new_X))
+        new_X_temp <- sub_cand[res,,drop=FALSE]
+        if ( is.dup ){
+          new_idx <- extract_all(new_X_temp, x_cand_origin)
+          new_X <- x_cand_origin[new_idx,,drop=FALSE]
+          N_acq <- c(N_acq, nrow(new_X))
+          X <- rbind(X, new_X)
+          Y <- rbind(Y, y_cand[new_idx,,drop=FALSE])
+          idx_x_acq <- c(idx_x_acq, idx_sub_cand[res])
+          idx_x_cand <- idx_x_cand0[-idx_x_acq]
+        } else {
+          new_idx <- extract_all(new_X_temp, sub_cand)
+          new_X <- sub_cand[new_idx,,drop=FALSE]
+          N_acq <- c(N_acq, nrow(new_X))
+          X <- rbind(X, new_X)
+          Y <- rbind(Y, y_cand[idx_sub_cand,,drop=FALSE][new_idx,,drop=FALSE])
+          idx_x_acq <- c(idx_x_acq, idx_sub_cand[new_idx])
+          idx_x_cand <- idx_x_cand0[-idx_x_acq]
+        }
 
-        X <- rbind(X, new_X)
-        Y <- rbind(Y, y_cand[idx_sub_cand,,drop=FALSE][res,,drop=FALSE])
-        idx_x_acq <- c(idx_x_acq, idx_sub_cand[res])
-        idx_x_cand <- idx_x_cand0[-idx_x_acq]
-
-        if ( i %% freq[1]==0 | i==N ){
+        if ( i %% freq[1]==0 ){
           if ( verb ) message(" - Updating and re-fitting ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = TRUE, verb = FALSE)
+          object <- update(object, X, Y, refit = TRUE, reset = reset[i], verb = FALSE)
           if ( verb ) message(" done")
         } else {
           if ( verb ) message(" - Updating ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = FALSE, verb = FALSE)
+          object <- update(object, X, Y, refit = FALSE, reset = reset[i], verb = FALSE)
           if ( verb ) Sys.sleep(0.5)
           if ( verb ) message(" done")
         }
@@ -635,12 +668,18 @@ design.gp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, lim
 #' @rdname design
 #' @method design dgp
 #' @export
-design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, limits = NULL, int = FALSE, f = NULL, freq = c(1, 1), x_test = NULL, y_test = NULL, target = NULL, method = mice, eval = NULL, verb = TRUE, check_point = NULL, cores = 1, train_N = 100, refit_cores = 1, ...) {
+design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, limits = NULL, int = FALSE, f = NULL, reps = 1, freq = c(1, 1), x_test = NULL, y_test = NULL, reset = FALSE, target = NULL, method = mice, eval = NULL, verb = TRUE, check_point = NULL, cores = 1, train_N = 100, refit_cores = 1, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"dgp") ) stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
 
   N <- check_N(N)
   freq <- check_freq(freq)
+  reset <- check_reset(reset, N)
   train_N <- check_train_N(train_N, N)
+  reps <- check_reps(reps)
   if( !is.null(refit_cores) ) {
     refit_cores <- as.integer(refit_cores)
     if ( refit_cores < 1 ) stop("'refit_cores' must be >= 1.", call. = FALSE)
@@ -785,7 +824,7 @@ design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, li
           }
         }
 
-        new_X <- x_cand[unique(as.vector(t(res))),,drop=FALSE]
+        new_X <- x_cand[rep(unique(as.vector(t(res))), reps),,drop=FALSE]
 
         N_acq <- c(N_acq, nrow(new_X))
 
@@ -808,13 +847,13 @@ design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, li
           Y <- rbind(Y, new_output)
         }
 
-        if ( i %% freq[1]==0 | i==N){
+        if ( i %% freq[1]==0 ){
           if ( verb ) message(" - Updating and re-fitting ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = TRUE, verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
+          object <- update(object, X, Y, refit = TRUE, reset = reset[i], verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
           if ( verb ) message(" done")
         } else {
           if ( verb ) message(" - Updating ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = FALSE, verb = FALSE, B = 10)
+          object <- update(object, X, Y, refit = FALSE, reset = reset[i], verb = FALSE, B = 10)
           if ( verb ) Sys.sleep(0.5)
           if ( verb ) message(" done")
         }
@@ -874,7 +913,15 @@ design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, li
     add_arg <- list(...)
     xy_cand_list <- check_xy_cand(x_cand, y_cand, n_dim_Y)
     xy_cand_list <- remove_dup(xy_cand_list, X)
-    x_cand <- xy_cand_list[[1]]
+    x_cand_origin <- xy_cand_list[[1]]
+    x_cand_rep <- pkg.env$np$unique(x_cand_origin, return_inverse=TRUE, axis=0L)
+    if ( nrow(x_cand_rep[[1]])==nrow(x_cand_origin) ){
+      x_cand <- x_cand_origin
+      is.dup <- FALSE
+    } else {
+      x_cand <- x_cand_rep[[1]]
+      is.dup <- TRUE
+    }
     y_cand <- xy_cand_list[[2]]
     idx_x_cand0 <- c(1:nrow(x_cand))
     idx_x_cand <- idx_x_cand0
@@ -926,7 +973,8 @@ design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, li
     if ( run ){
       for ( i in 1:N ){
         if ( n_cand<=length(idx_x_cand) ){
-          idx_sub_cand <- sample(idx_x_cand, n_cand, replace = FALSE)
+          idx_idx <- suppressPackageStartupMessages(clhs::clhs(as.data.frame(x_cand[idx_x_cand,,drop = FALSE]), size = n_cand, progress = FALSE, simple = TRUE))
+          idx_sub_cand <- idx_x_cand[idx_idx]
         } else {
           idx_sub_cand <- idx_x_cand
         }
@@ -969,22 +1017,32 @@ design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, li
           }
         }
 
-        new_X <- sub_cand[unique(as.vector(t(res))),,drop=FALSE]
+        new_X_temp <- sub_cand[unique(as.vector(t(res))),,drop=FALSE]
+        if ( is.dup ){
+          new_idx <- extract_all(new_X_temp, x_cand_origin)
+          new_X <- x_cand_origin[new_idx,,drop=FALSE]
+          N_acq <- c(N_acq, nrow(new_X))
+          X <- rbind(X, new_X)
+          Y <- rbind(Y, y_cand[new_idx,,drop=FALSE])
+          idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(as.vector(t(res)))])
+          idx_x_cand <- idx_x_cand0[-idx_x_acq]
+        } else {
+          new_idx <- extract_all(new_X_temp, sub_cand)
+          new_X <- sub_cand[new_idx,,drop=FALSE]
+          N_acq <- c(N_acq, nrow(new_X))
+          X <- rbind(X, new_X)
+          Y <- rbind(Y, y_cand[idx_sub_cand,,drop=FALSE][new_idx,,drop=FALSE])
+          idx_x_acq <- c(idx_x_acq, idx_sub_cand[new_idx])
+          idx_x_cand <- idx_x_cand0[-idx_x_acq]
+        }
 
-        N_acq <- c(N_acq, nrow(new_X))
-
-        X <- rbind(X, new_X)
-        Y <- rbind(Y, y_cand[idx_sub_cand,,drop=FALSE][unique(as.vector(t(res))),,drop=FALSE])
-        idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(as.vector(t(res)))])
-        idx_x_cand <- idx_x_cand0[-idx_x_acq]
-
-        if ( i %% freq[1]==0 | i==N ){
+        if ( i %% freq[1]==0 ){
           if ( verb ) message(" - Updating and re-fitting ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = TRUE, verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
+          object <- update(object, X, Y, refit = TRUE, reset = reset[i], verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
           if ( verb ) message(" done")
         } else {
           if ( verb ) message(" - Updating ...", appendLF = FALSE)
-          object <- update(object, X, Y, refit = FALSE, verb = FALSE, B = 10)
+          object <- update(object, X, Y, refit = FALSE, reset = reset[i], verb = FALSE, B = 10)
           if ( verb ) message(" done")
         }
 
@@ -1090,12 +1148,18 @@ design.dgp <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, li
 #' @rdname design
 #' @method design bundle
 #' @export
-design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, limits = NULL, int = FALSE, f = NULL, freq = c(1, 1), x_test = NULL, y_test = NULL, target = NULL, method = mice, eval = NULL, verb = TRUE, check_point = NULL, cores = 1, train_N = 100, refit_cores = 1, ...) {
+design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200, limits = NULL, int = FALSE, f = NULL, reps = 1, freq = c(1, 1), x_test = NULL, y_test = NULL, reset = FALSE, target = NULL, method = mice, eval = NULL, verb = TRUE, check_point = NULL, cores = 1, train_N = 100, refit_cores = 1,  ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"bundle") ) stop("'object' must be an instance of the 'bundle' class.", call. = FALSE)
 
   N <- check_N(N)
+  reset <- check_reset(reset, N)
   freq <- check_freq(freq)
   train_N <- check_train_N(train_N, N)
+  reps <- check_reps(reps)
   if( !is.null(refit_cores) ) {
     refit_cores <- as.integer(refit_cores)
     if ( refit_cores < 1 ) stop("'refit_cores' must be >= 1.", call. = FALSE)
@@ -1272,8 +1336,12 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
             new_X <- new_X[!istarget,,drop=FALSE]
           }
           rep_new_X <- pkg.env$np$unique(new_X, return_inverse=TRUE, axis=0L)
-          new_X_unique <- rep_new_X[[1]]
-          rep_idx <- rep_new_X[[2]] + 1
+          new_X_unique <- matrix( rep( t( rep_new_X[[1]] ) , reps ) , ncol = ncol(rep_new_X[[1]]) , byrow = TRUE )
+          rep_idx0 <- rep_new_X[[2]] + 1
+          rep_idx <- c()
+          for (j in 1:reps){
+            rep_idx <- c(rep_idx, rep_idx0+(j-1)*nrow(rep_new_X[[1]]))
+          }
           if ("..." %in% fnames){
             new_output_unique <- do.call(f, c(list(new_X_unique), add_arg))
           } else {
@@ -1291,19 +1359,21 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
             new_Y_unique <- new_output_unique
           }
           new_Y <- new_Y_unique[rep_idx,,drop=F]
-          temp <- rep(1, n_emulators)
+          temp <- rep(reps, n_emulators)
           if ( !is.null(target) ) temp[istarget] <- 0
           N_acq_ind <- rbind(N_acq_ind, temp)
 
           if ( !is.null(target) ) ctr <- 1
           for ( j in 1:n_emulators ){
             if ( is.null(target) ){
-              X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[j,,drop=FALSE])
-              Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[j,j,drop=FALSE])
+              X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]],
+                 matrix( rep( t( new_X[j,,drop=FALSE] ) , reps ) , ncol = ncol(new_X[j,,drop=FALSE]) , byrow = TRUE ))
+              Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[seq(j, by = n_emulators, length = reps),j,drop=FALSE])
             } else {
               if ( !istarget[j] ) {
-                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[ctr,,drop=FALSE])
-                Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[ctr,j,drop=FALSE])
+                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]],
+                  matrix( rep( t( new_X[ctr,,drop=FALSE] ) , reps ) , ncol = ncol(new_X[ctr,,drop=FALSE]) , byrow = TRUE ))
+                Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[seq(ctr, by = sum(!istarget), length = reps),j,drop=FALSE])
                 ctr <- ctr + 1
               }
             }
@@ -1318,8 +1388,13 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
             }
           }
           rep_new_X <- pkg.env$np$unique(new_X, return_inverse=TRUE, axis=0L)
-          new_X_unique <- rep_new_X[[1]]
-          rep_idx <- rep_new_X[[2]] + 1
+          new_X_unique <- matrix( rep( t( rep_new_X[[1]] ) , reps ) , ncol = ncol(rep_new_X[[1]]) , byrow = TRUE )
+          rep_idx0 <- rep_new_X[[2]] + 1
+          rep_idx <- c()
+          for (j in 1:reps){
+            rep_idx <- c(rep_idx, rep_idx0+(j-1)*nrow(rep_new_X[[1]]))
+          }
+
           if ("..." %in% fnames){
             new_output_unique <- do.call(f, c(list(new_X_unique), add_arg))
           } else {
@@ -1339,7 +1414,7 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
 
           new_Y <- new_Y_unique[rep_idx,,drop=F]
 
-          temp <- rep(nrow(res), n_emulators)
+          temp <- rep(nrow(res)*reps, n_emulators)
           if ( !is.null(target) ) temp[istarget] <- 0
           N_acq_ind <- rbind(N_acq_ind, temp)
 
@@ -1349,13 +1424,23 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
           }
           for ( j in 1:n_emulators ){
             if ( is.null(target) ){
-              extract <- j + seq(0, by = n_emulators, length = nrow(res))
-              X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[extract,,drop=FALSE])
+              extract0 <- j + seq(0, by = n_emulators, length = nrow(res))
+              extract <- c()
+              for (l in 1:reps){
+                extract <- c(extract, extract0+(l-1)*nrow(new_X))
+              }
+              X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]],
+                  matrix( rep( t( new_X[extract0,,drop=FALSE] ) , reps ) , ncol = ncol(new_X[extract0,,drop=FALSE]) , byrow = TRUE ))
               Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[extract,j,drop=FALSE])
             } else {
               if ( !istarget[j] ) {
-                extract <- ctr + seq(0, by = active_emu, length = nrow(res))
-                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[extract,,drop=FALSE])
+                extract0 <- ctr + seq(0, by = active_emu, length = nrow(res))
+                extract <- c()
+                for (l in 1:reps){
+                  extract <- c(extract, extract0+(l-1)*nrow(new_X))
+                }
+                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]],
+                    matrix( rep( t( new_X[extract0,,drop=FALSE] ) , reps ) , ncol = ncol(new_X[extract0,,drop=FALSE]) , byrow = TRUE ))
                 Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[extract,j,drop=FALSE])
                 ctr <- ctr + 1
               }
@@ -1363,19 +1448,19 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
           }
         }
 
-        if ( i %% freq[1]==0 | i==N){
+        if ( i %% freq[1]==0 ){
           if ( verb ) message(" - Updating and re-fitting ...", appendLF = FALSE)
           for ( k in 1:n_emulators ){
             if ( is.null(target) ) {
               obj_k <- object[[paste('emulator',k,sep='')]]
-              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE)
-              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
+              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE)
+              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
               object[[paste('emulator',k,sep='')]] <- obj_k
             } else {
               if ( !istarget[k] ){
                 obj_k <- object[[paste('emulator',k,sep='')]]
-                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE)
-                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
+                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE)
+                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
                 object[[paste('emulator',k,sep='')]] <- obj_k
               }
             }
@@ -1386,14 +1471,14 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
           for ( k in 1:n_emulators ){
             if ( is.null(target) ) {
               obj_k <- object[[paste('emulator',k,sep='')]]
-              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, verb = FALSE)
-              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, verb = FALSE, B = 10)
+              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, reset = reset[i], verb = FALSE)
+              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, reset = reset[i], verb = FALSE, B = 10)
               object[[paste('emulator',k,sep='')]] <- obj_k
             } else {
               if ( !istarget[k] ){
                 obj_k <- object[[paste('emulator',k,sep='')]]
-                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, verb = FALSE)
-                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, verb = FALSE, B = 10)
+                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, reset = reset[i], verb = FALSE)
+                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = FALSE, reset = reset[i], verb = FALSE, B = 10)
                 object[[paste('emulator',k,sep='')]] <- obj_k
               }
             }
@@ -1502,7 +1587,15 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
     for (j in 1:n_emulators){
       xy_cand_list <- remove_dup(xy_cand_list, X[[paste('emulator',j,sep="")]])
     }
-    x_cand <- xy_cand_list[[1]]
+    x_cand_origin <- xy_cand_list[[1]]
+    x_cand_rep <- pkg.env$np$unique(x_cand_origin, return_inverse=TRUE, axis=0L)
+    if ( nrow(x_cand_rep[[1]])==nrow(x_cand_origin) ){
+      x_cand <- x_cand_origin
+      is.dup <- FALSE
+    } else {
+      x_cand <- x_cand_rep[[1]]
+      is.dup <- TRUE
+    }
     y_cand <- xy_cand_list[[2]]
     idx_x_cand0 <- c(1:nrow(x_cand))
     idx_x_cand <- idx_x_cand0
@@ -1563,7 +1656,9 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
     if ( run ){
       for ( i in 1:N ){
         if ( n_cand<=length(idx_x_cand) ){
-          idx_sub_cand <- sample(idx_x_cand, n_cand, replace = FALSE)
+          idx_idx <- suppressPackageStartupMessages(clhs::clhs(as.data.frame(x_cand[idx_x_cand,,drop = FALSE]), size = n_cand, progress = FALSE, simple = TRUE))
+          idx_sub_cand <- idx_x_cand[idx_idx]
+          #idx_sub_cand <- sample(idx_x_cand, n_cand, replace = FALSE)
         } else {
           idx_sub_cand <- idx_x_cand
         }
@@ -1614,32 +1709,96 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
         }
 
         if ( nrow(res)==1 ){
-          new_X <- sub_cand[res[1,],,drop=FALSE]
-          new_idx <- res[1,]
-          new_Y <- y_cand[idx_sub_cand,,drop=FALSE][new_idx,,drop=FALSE]
-
-          temp <- rep(1, n_emulators)
-          if ( !is.null(target) ) temp[istarget] <- 0
-          N_acq_ind <- rbind(N_acq_ind, temp)
-
-          for ( j in 1:n_emulators ){
-            if ( is.null(target) ){
-              X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[j,,drop=FALSE])
-              Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[j,j,drop=FALSE])
-            } else {
-              if ( !istarget[j] ) {
-                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[j,,drop=FALSE])
-                Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[j,j,drop=FALSE])
+          new_X_temp <- sub_cand[res[1,],,drop=FALSE]
+          if ( is.dup ){
+            temp <- c()
+            for ( j in 1:n_emulators ){
+              new_idx <- extract_all(new_X_temp[j,,drop=FALSE], x_cand_origin)
+              new_X <- x_cand_origin[new_idx,,drop=FALSE]
+              new_Y <- y_cand[new_idx,,drop=FALSE]
+              if ( is.null(target) ){
+                temp <- c(temp, nrow(new_X))
+                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X)
+                Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[,j,drop=FALSE])
+              } else {
+                if ( !istarget[j] ) {
+                  temp <- c(temp, nrow(new_X))
+                  X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X)
+                  Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[,j,drop=FALSE])
+                } else {
+                  temp <- c(temp, 0)
+                }
               }
             }
-          }
-          if ( is.null(target) ){
-            idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(new_idx)])
+
+            N_acq_ind <- rbind(N_acq_ind, temp)
+
+            if ( is.null(target) ){
+              idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(res[1,])])
+            } else {
+              idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(res[1,][!istarget])])
+            }
+            idx_x_cand <- idx_x_cand0[-idx_x_acq]
           } else {
-            idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(new_idx[!istarget])])
+            new_X <- new_X_temp
+            new_idx <- res[1,]
+            new_Y <- y_cand[idx_sub_cand,,drop=FALSE][new_idx,,drop=FALSE]
+
+            temp <- rep(1, n_emulators)
+            if ( !is.null(target) ) temp[istarget] <- 0
+            N_acq_ind <- rbind(N_acq_ind, temp)
+
+            for ( j in 1:n_emulators ){
+              if ( is.null(target) ){
+                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[j,,drop=FALSE])
+                Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[j,j,drop=FALSE])
+              } else {
+                if ( !istarget[j] ) {
+                  X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X[j,,drop=FALSE])
+                  Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[j,j,drop=FALSE])
+                }
+              }
+            }
+            if ( is.null(target) ){
+              idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(new_idx)])
+            } else {
+              idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(new_idx[!istarget])])
+            }
+            idx_x_cand <- idx_x_cand0[-idx_x_acq]
           }
-          idx_x_cand <- idx_x_cand0[-idx_x_acq]
         } else {
+          if ( is.dup ){
+            temp <- c()
+            for ( j in 1:n_emulators ){
+              new_X_temp <- sub_cand[res[,j],,drop=FALSE]
+              new_idx <- extract_all(new_X_temp, x_cand_origin)
+              new_X <- x_cand_origin[new_idx,,drop=FALSE]
+              new_Y <- y_cand[new_idx,,drop=FALSE]
+              if ( is.null(target) ){
+                temp <- c(temp, nrow(new_X))
+                X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X)
+                Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[,j,drop=FALSE])
+              } else {
+                if ( !istarget[j] ) {
+                  temp <- c(temp, nrow(new_X))
+                  X[[paste('emulator',j,sep="")]] <- rbind(X[[paste('emulator',j,sep="")]], new_X)
+                  Y[[paste('emulator',j,sep="")]] <- rbind(Y[[paste('emulator',j,sep="")]], new_Y[,j,drop=FALSE])
+                } else {
+                  temp <- c(temp, 0)
+                }
+              }
+            }
+
+            N_acq_ind <- rbind(N_acq_ind, temp)
+
+            if ( is.null(target) ){
+              idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(as.vector(t(res)))])
+            } else {
+              mask <- rep(!istarget, nrow(res))
+              idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(as.vector(t(res))[mask])])
+            }
+            idx_x_cand <- idx_x_cand0[-idx_x_acq]
+          } else {
             new_X <- c()
             new_idx <- c()
             for (j in 1:nrow(res) ){
@@ -1671,21 +1830,22 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
               idx_x_acq <- c(idx_x_acq, idx_sub_cand[unique(new_idx[mask])])
             }
             idx_x_cand <- idx_x_cand0[-idx_x_acq]
+          }
         }
 
-        if ( i %% freq[1]==0 | i==N){
+        if ( i %% freq[1]==0 ){
           if ( verb ) message(" - Updating and re-fitting ...", appendLF = FALSE)
           for ( k in 1:n_emulators ){
             if ( is.null(target) ){
               obj_k <- object[[paste('emulator',k,sep='')]]
-              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE)
-              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
+              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE)
+              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
               object[[paste('emulator',k,sep='')]] <- obj_k
             } else {
               if ( !istarget[k] ){
                 obj_k <- object[[paste('emulator',k,sep='')]]
-                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE)
-                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
+                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE)
+                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X[[paste('emulator',k,sep="")]], Y[[paste('emulator',k,sep="")]], refit = TRUE, reset = reset[i], verb = FALSE, N = train_N[i], cores = refit_cores, B = 10)
                 object[[paste('emulator',k,sep='')]] <- obj_k
               }
             }
@@ -1696,14 +1856,14 @@ design.bundle <- function(object, N, x_cand = NULL, y_cand = NULL, n_cand = 200,
           for ( k in 1:n_emulators ){
             if ( is.null(target) ){
               obj_k <- object[[paste('emulator',k,sep='')]]
-              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, verb = FALSE)
-              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, verb = FALSE, B = 10)
+              if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, reset = reset[i], verb = FALSE)
+              if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, reset = reset[i], verb = FALSE, B = 10)
               object[[paste('emulator',k,sep='')]] <- obj_k
             } else {
               if ( !istarget[k] ){
                 obj_k <- object[[paste('emulator',k,sep='')]]
-                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, verb = FALSE)
-                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, verb = FALSE, B = 10)
+                if ( inherits(obj_k,"gp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, reset = reset[i], verb = FALSE)
+                if ( inherits(obj_k,"dgp") ) obj_k <- update(obj_k, X, Y[,k], refit = FALSE, reset = reset[i], verb = FALSE, B = 10)
                 object[[paste('emulator',k,sep='')]] <- obj_k
               }
             }
@@ -1878,6 +2038,13 @@ check_n_cand <- function(n_cand){
   return(n_cand)
 }
 
+#check argument reps
+check_reps <- function(reps){
+  reps <- as.integer(reps)
+  if ( reps < 1 ) stop("'reps' must be greater than or equal to 1.", call. = FALSE)
+  return(reps)
+}
+
 #check argument x_cand and y_cand
 check_xy_cand <- function(x_cand, y_cand, n_dim_Y){
   if ( is.null(y_cand) ) stop("'y_cand' must be provided if 'x_cand' is not NULL.", call. = FALSE)
@@ -1903,6 +2070,14 @@ remove_dup <- function(xy_cand_list, X){
     y_cand <- y_cand[idx,,drop=FALSE]
   }
   return(list(x_cand, y_cand))
+}
+
+#find all data points in the candidate dataset that have the same input locations as the selected design points
+extract_all <- function(X ,x_cand){
+  x_cand_s <- apply(x_cand, 1, paste, collapse = ", ")
+  X_s <- apply(X, 1, paste, collapse = ", ")
+  idx <- x_cand_s %in% X_s
+  return(idx)
 }
 
 #check argument x_test and y_test
@@ -1966,6 +2141,15 @@ check_int <- function(int, n_dim_X){
     if ( length(int)!=n_dim_X ) stop("The length of 'int' should equal to the number of input dimensions.", call. = FALSE)
   }
   return(int)
+}
+
+check_reset <- function(reset, N){
+  if ( length(reset)==1 ) {
+    reset <- rep(reset, N)
+  } else {
+    if ( length(reset)!=N ) stop("The length of 'reset' should equal to the number of steps of the sequential design.", call. = FALSE)
+  }
+  return(reset)
 }
 
 #check argument object and determine if it is the first time being used by design()

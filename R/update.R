@@ -11,6 +11,8 @@
 #' * If `object` is an instance of the `dgp` class, `Y` is a matrix with its rows being output data points and columns being
 #'     output dimensions. When `likelihood` (see below) is not `NULL`, `Y` must be a matrix with only one column.
 #' @param refit a bool indicating whether to re-fit the emulator `object` after the training input and output are updated. Defaults to `FALSE`.
+#' @param reset a bool indicating whether to reset hyperparameters of the emulator `object` to their initial values when the emulator was
+#'     constructed, after the training input and output are updated. Defaults to `FALSE`.
 #' @param verb a bool indicating if the trace information will be printed during the function execution.
 #'     Defaults to `TRUE`.
 #' @param N number of training iterations used to re-fit the emulator `object` if it is an instance of the `dgp` class. Defaults to `100`.
@@ -39,19 +41,23 @@
 #' @examples
 #' \dontrun{
 #'
-#' # See locate() for an example.
+#' # See alm(), mice() or pei() for an example.
 #' }
 #' @md
 #' @name update
 #' @export
-update <- function(object, X, Y, refit, verb, ...){
+update <- function(object, X, Y, refit, reset, verb, ...){
   UseMethod("update")
 }
 
 #' @rdname update
 #' @method update dgp
 #' @export
-update.dgp <- function(object, X, Y, refit = FALSE, verb = TRUE, N = 100, cores = 1, ess_burn = 10, B = NULL, ...) {
+update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, N = 100, cores = 1, ess_burn = 10, B = NULL, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"dgp") ){
     stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
@@ -74,12 +80,13 @@ update.dgp <- function(object, X, Y, refit = FALSE, verb = TRUE, N = 100, cores 
   if ( is.vector(Y) ) Y <- as.matrix(Y)
 
   if ( nrow(X)!=nrow(Y) ) stop("'X' and 'Y' have different number of data points.", call. = FALSE)
+  if ( isFALSE(reset)&ncol(X)!=ncol(object$data$X) ) stop("'X' and the training input of the DGP emulator must have same number of dimensions when 'reset = FALSE'.", call. = FALSE)
 
   linked_idx <- object$container_obj$local_input_idx
 
   if ( verb ) message("Updating ...", appendLF = FALSE)
   constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
-  constructor_obj_cp$update_xy(X,Y)
+  constructor_obj_cp$update_xy(X, Y, reset)
   if ( verb ) {
     Sys.sleep(0.2)
     message(" done")
@@ -109,6 +116,11 @@ update.dgp <- function(object, X, Y, refit = FALSE, verb = TRUE, N = 100, cores 
   new_object <- list()
   new_object[['data']][['X']] <- unname(X)
   new_object[['data']][['Y']] <- unname(Y)
+  new_object[['specs']] <- extract_specs(est_obj, "dgp")
+  if ("internal_dims" %in% names(object[['specs']])){
+    new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
+    new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
+  }
   new_object[['constructor_obj']] <- constructor_obj_cp
   new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B, block = isblock)
   new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx, isblock)
@@ -122,7 +134,11 @@ update.dgp <- function(object, X, Y, refit = FALSE, verb = TRUE, N = 100, cores 
 #' @rdname update
 #' @method update gp
 #' @export
-update.gp <- function(object, X, Y, refit = FALSE, verb = TRUE, ...) {
+update.gp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"gp") ){
     stop("'object' must be an instance of the 'gp' class.", call. = FALSE)
@@ -142,7 +158,7 @@ update.gp <- function(object, X, Y, refit = FALSE, verb = TRUE, ...) {
 
   if ( verb ) message("Updating ...", appendLF = FALSE)
   constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
-  constructor_obj_cp$update_xy(X,Y)
+  constructor_obj_cp$update_xy(X, Y, reset)
   if ( verb ) {
     Sys.sleep(0.5)
     message(" done")
@@ -157,6 +173,11 @@ update.gp <- function(object, X, Y, refit = FALSE, verb = TRUE, ...) {
   new_object <- list()
   new_object[['data']][['X']] <- unname(X)
   new_object[['data']][['Y']] <- unname(Y)
+  new_object[['specs']] <- extract_specs(constructor_obj_cp, "gp")
+  if ("internal_dims" %in% names(object[['specs']])){
+    new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
+    new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
+  }
   new_object[['constructor_obj']] <- constructor_obj_cp
   new_object[['container_obj']] <- pkg.env$dgpsi$container(constructor_obj_cp$export(), linked_idx)
   new_object[['emulator_obj']] <- constructor_obj_cp

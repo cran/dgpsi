@@ -26,7 +26,7 @@ combine <- function(...) {
 
 #' @title Pack GP and DGP emulators into a bundle
 #'
-#' @description This function packs GP emulators and DGP emulators (without likelihood layers) into a `bundle` class for
+#' @description This function packs GP emulators and DGP emulators into a `bundle` class for
 #'     sequential designs if each emulator emulates one output dimension of the underlying simulator.
 #'
 #' @param ... a sequence of emulators produced by [gp()] or [dgp()].
@@ -45,7 +45,6 @@ combine <- function(...) {
 #' # load packages and the Python env
 #' library(lhs)
 #' library(dgpsi)
-#' init_py()
 #'
 #' # construct a function with a two-dimensional output
 #' f <- function(x) {
@@ -105,6 +104,10 @@ combine <- function(...) {
 #' @md
 #' @export
 pack <- function(...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   res <- list(...)
   X_all <- list()
   Y_all <- list()
@@ -113,11 +116,11 @@ pack <- function(...) {
   training_output <- c()
   for ( i in 1:length(res) ){
     if ( !inherits(res[[i]],"gp") & !inherits(res[[i]],"dgp") ) stop("The function only accepts GP or DGP emulators as inputs.", call. = FALSE)
-    if ( inherits(res[[i]],"dgp") ){
-      if ( res[[i]]$constructor_obj$all_layer[[res[[i]]$constructor_obj$n_layer]][[1]]$type == 'likelihood' ){
-        stop("The function can only pack DGP emulators without likelihood layers.", call. = FALSE)
-      }
-    }
+    #if ( inherits(res[[i]],"dgp") ){
+    #  if ( res[[i]]$constructor_obj$all_layer[[res[[i]]$constructor_obj$n_layer]][[1]]$type == 'likelihood' ){
+    #    stop("The function can only pack DGP emulators without likelihood layers.", call. = FALSE)
+    #  }
+    #}
     if ( !identical(res[[i]]$data$X, training_input) ) stop("The function can only pack emulators with common training input data.", call. = FALSE)
     Y_dim <- ncol(res[[i]]$data$Y)
     if ( Y_dim!=1 ) stop(sprintf("The function is only applicable to emulators with 1D output. Your emulator %i has %i output dimensions.", i, Y_dim), call. = FALSE)
@@ -153,6 +156,10 @@ pack <- function(...) {
 #' @md
 #' @export
 unpack <- function(object) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"bundle") ){
     stop("'object' must be an instance of the 'bundle' class.", call. = FALSE)
   }
@@ -191,6 +198,10 @@ unpack <- function(object) {
 #' @md
 #' @export
 write <- function(object, pkl_file) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   pkl_file <- tools::file_path_sans_ext(pkl_file)
   lst <- unclass(object)
   pkg.env$dgpsi$write(lst, pkl_file)
@@ -214,6 +225,10 @@ write <- function(object, pkl_file) {
 #' @md
 #' @export
 set_seed <- function(seed) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   seed <- as.integer(seed)
   set.seed(seed)
   reticulate::py_set_seed(seed, disable_hash_randomization = TRUE)
@@ -237,6 +252,10 @@ set_seed <- function(seed) {
 #' @md
 #' @export
 read <- function(pkl_file) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   pkl_file <- tools::file_path_sans_ext(pkl_file)
   res <- pkg.env$dgpsi$read(pkl_file)
   if ('emulator_obj' %in% names(res)){
@@ -291,6 +310,10 @@ NULL
 #' @method summary gp
 #' @export
 summary.gp <- function(object, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   pkg.env$dgpsi$summary(object$emulator_obj, 'pretty')
 }
 
@@ -298,6 +321,10 @@ summary.gp <- function(object, ...) {
 #' @method summary dgp
 #' @export
 summary.dgp <- function(object, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   pkg.env$dgpsi$summary(object$emulator_obj, 'pretty')
 }
 
@@ -305,6 +332,10 @@ summary.dgp <- function(object, ...) {
 #' @method summary lgp
 #' @export
 summary.lgp <- function(object, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   pkg.env$dgpsi$summary(object$emulator_obj, 'pretty')
 }
 
@@ -333,6 +364,10 @@ summary.lgp <- function(object, ...) {
 #' @md
 #' @export
 set_linked_idx <- function(object, idx) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   idx <- reticulate::np_array(as.integer(idx - 1))
   object[['constructor_obj']] <- pkg.env$copy$deepcopy(object[['constructor_obj']])
   object[['emulator_obj']] <- pkg.env$copy$deepcopy(object[['emulator_obj']])
@@ -370,6 +405,10 @@ set_linked_idx <- function(object, idx) {
 #' @md
 #' @export
 set_imp <- function(object, B = 10) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"dgp") ){
     stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
   }
@@ -384,6 +423,11 @@ set_imp <- function(object, B = 10) {
   new_object <- list()
   new_object[['data']][['X']] <- object$data$X
   new_object[['data']][['Y']] <- object$data$Y
+  new_object[['specs']] <- extract_specs(est_obj, "dgp")
+  if ("internal_dims" %in% names(object[['specs']])){
+    new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
+    new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
+  }
   new_object[['constructor_obj']] <- constructor_obj_cp
   new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B, block = isblock)
   new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx, isblock)
@@ -426,6 +470,10 @@ set_imp <- function(object, B = 10) {
 #' @md
 #' @export
 window <- function(object, start, end = NULL, thin = 1) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"dgp") ){
     stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
   }
@@ -467,6 +515,11 @@ window <- function(object, start, end = NULL, thin = 1) {
   new_object <- list()
   new_object[['data']][['X']] <- object$data$X
   new_object[['data']][['Y']] <- object$data$Y
+  new_object[['specs']] <- extract_specs(est_obj, "dgp")
+  if ("internal_dims" %in% names(object[['specs']])){
+    new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
+    new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
+  }
   new_object[['constructor_obj']] <- constructor_obj_cp
   new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B, block = isblock)
   new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx, isblock)
@@ -508,6 +561,10 @@ window <- function(object, start, end = NULL, thin = 1) {
 #' @md
 #' @export
 nllik <- function(object, x, y) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"dgp") ) stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
   if ( !is.matrix(x)&!is.vector(x) ) stop("'x' must be a vector or a matrix.", call. = FALSE)
   if ( !is.matrix(y)&!is.vector(y) ) stop("'y' must be a vector or a matrix.", call. = FALSE)
@@ -548,6 +605,10 @@ nllik <- function(object, x, y) {
 #' @export
 
 trace_plot <- function(object, layer = NULL, node = 1) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   if ( !inherits(object,"dgp") ) stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
 
   all_layer <- object$constructor_obj$all_layer
@@ -586,4 +647,29 @@ trace_plot <- function(object, layer = NULL, node = 1) {
     message('There is nothing to plot for a likelihood node, please choose a GP node instead.')
   }
 
+}
+
+extract_specs <- function(obj, type) {
+  res <- list()
+  if ( type=='gp' ){
+    res[['kernel']] = obj$kernel$name
+    res[['lengthscales']] = as.vector(obj$kernel$length)
+    res[['scale']] = as.numeric(obj$kernel$scale)
+    res[['nugget']] = as.numeric(obj$kernel$nugget)
+  } else if ( type=='dgp' ){
+    no_layer <- length(obj)
+    for (l in 1:no_layer){
+      no_node <- length(obj[[l]])
+      for (k in 1:no_node)
+        if ( obj[[l]][[k]]$type == 'likelihood' ){
+          res[[paste('layer', l, sep="")]][[paste('node', k, sep="")]][['type']] <- obj[[l]][[k]]$name
+        } else {
+          res[[paste('layer', l, sep="")]][[paste('node', k, sep="")]][['kernel']] <- obj[[l]][[k]]$name
+          res[[paste('layer', l, sep="")]][[paste('node', k, sep="")]][['lengthscales']] <- as.vector(obj[[l]][[k]]$length)
+          res[[paste('layer', l, sep="")]][[paste('node', k, sep="")]][['scale']] <- as.numeric(obj[[l]][[k]]$scale)
+          res[[paste('layer', l, sep="")]][[paste('node', k, sep="")]][['nugget']] <- as.numeric(obj[[l]][[k]]$nugget)
+        }
+    }
+  }
+  return(res)
 }

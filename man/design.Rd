@@ -16,9 +16,11 @@ design(
   limits,
   int,
   f,
+  reps,
   freq,
   x_test,
   y_test,
+  reset,
   target,
   method,
   eval,
@@ -37,9 +39,11 @@ design(
   limits = NULL,
   int = FALSE,
   f = NULL,
+  reps = 1,
   freq = c(1, 1),
   x_test = NULL,
   y_test = NULL,
+  reset = FALSE,
   target = NULL,
   method = mice,
   eval = NULL,
@@ -58,9 +62,11 @@ design(
   limits = NULL,
   int = FALSE,
   f = NULL,
+  reps = 1,
   freq = c(1, 1),
   x_test = NULL,
   y_test = NULL,
+  reset = FALSE,
   target = NULL,
   method = mice,
   eval = NULL,
@@ -81,9 +87,11 @@ design(
   limits = NULL,
   int = FALSE,
   f = NULL,
+  reps = 1,
   freq = c(1, 1),
   x_test = NULL,
   y_test = NULL,
+  reset = FALSE,
   target = NULL,
   method = mice,
   eval = NULL,
@@ -144,6 +152,11 @@ need to be updated after each step of the sequential design.
 }
 }}
 
+\item{reps}{an integer that gives the number of repetitions of the located design points to be created and used for evaluations of \code{f}. Set the
+argument to an integer greater than \code{1} if \code{f} is a stochastic function that can generate different responses given a same input and the
+supplied emulator \code{object} can deal with stochastic responses, e.g., a (D)GP emulator with \code{nugget_est = TRUE} or a DGP emulator with a
+likelihood layer. The argument is only used when \code{f} is supplied. Defaults to \code{1}.}
+
 \item{freq}{a vector of two integers with the first element giving the frequency (in number of steps) to re-fit the
 emulator, and the second element giving the frequency to implement the emulator validation (for RMSE). Defaults to \code{c(1, 1)}.}
 
@@ -159,6 +172,11 @@ output dimensions.
 }
 
 Set to \code{NULL} for the LOO-based emulator validation. Defaults to \code{NULL}. This argument is only used if \code{eval = NULL}.}
+
+\item{reset}{a bool or a vector of bools indicating whether to reset hyperparameters of the emulator to their initial values when it was initially
+constructed after the input-output update and before the re-fit. If a bool is given, it will be applied to
+every step of the sequential design. If a vector is provided, its length should be equal to \code{N} and will be applied to individual
+steps of the sequential design. Defaults to \code{FALSE}.}
 
 \item{target}{a numeric or a vector that gives the target RMSEs at which the sequential design is terminated. Defaults to \code{NULL}, in which
 case the sequential design stops after \code{N} steps. See \emph{Note} section below for further information about \code{target}.}
@@ -186,7 +204,7 @@ points to be added to individual emulators in the bundle.
 
 See \code{\link[=alm]{alm()}}, \code{\link[=mice]{mice()}}, and \code{\link[=pei]{pei()}} for examples on customizing \code{method}. Defaults to \code{\link[=mice]{mice()}}.}
 
-\item{eval}{an R function that calculates the customized evaluating metric of the emulator.The function must satisfy the following basic rules:
+\item{eval}{an R function that calculates the customized evaluating metric of the emulator. The function must satisfy the following basic rules:
 \itemize{
 \item the first argument is an emulator object that can be either an instance of
 \itemize{
@@ -213,7 +231,7 @@ Defaults to \code{TRUE}.}
 from the user if the sequential design should continue or be terminated. Set to \code{NULL} to suspend the manual intervention. Defaults
 to \code{NULL}.}
 
-\item{cores}{an integers that gives the number of cores to be used for emulator validations. If set to \code{NULL}, the number of cores is
+\item{cores}{an integer that gives the number of cores to be used for emulator validations. If set to \code{NULL}, the number of cores is
 set to \verb{(max physical cores available - 1)}. Defaults to \code{1}. This argument is only used if \code{eval = NULL}.}
 
 \item{...}{any arguments (with names different from those of arguments used in \code{\link[=design]{design()}}) that are used by \code{f}, \code{method}, and \code{eval}
@@ -273,7 +291,7 @@ See further examples and tutorials at \url{https://mingdeyu.github.io/dgpsi-R/}.
 }
 \note{
 \itemize{
-\item The re-fitting and validation of an emulator are forced after the final step of a sequential design even \code{N} is not multiples of elements in \code{freq}.
+\item The validation of an emulator is forced after the final step of a sequential design even \code{N} is not multiples of the second element in \code{freq}.
 \item Any \code{loo} or \code{oos} slot that already exists in \code{object} will be cleaned, and a new slot called \code{loo} or \code{oos} will be created in the returned object
 depending on whether \code{x_test} and \code{y_test} are provided. The new slot gives the validation information of the emulator constructed in the final step of
 the sequential design. See \code{\link[=validate]{validate()}} for more information about the slots \code{loo} and \code{oos}.
@@ -313,7 +331,6 @@ R matrix. Thus, if \code{x_test} or \code{y_test} is a single testing data point
 # load packages and the Python env
 library(lhs)
 library(dgpsi)
-init_py()
 
 # construct a 2D non-stationary function that takes a matrix as the input
 f <- function(x) {

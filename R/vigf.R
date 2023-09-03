@@ -1,7 +1,7 @@
-#' @title Locate the next design point for a (D)GP emulator or a bundle of (D)GP emulators using ALM
+#' @title Locate the next design point for a (D)GP emulator or a bundle of (D)GP emulators using VIGF
 #'
 #' @description This function searches from a candidate set to locate the next design point(s) to be added to a (D)GP emulator
-#'     or a bundle of (D)GP emulators using the Active Learning MacKay (ALM), see the reference below.
+#'     or a bundle of (D)GP emulators using the Variance of Improvement for Global Fit (VIGF). For VIGF on GP emulators, see the reference below.
 #'
 #' @param object can be one of the following:
 #' * the S3 class `gp`.
@@ -16,7 +16,7 @@
 #' @param threading a bool indicating whether to use the multi-threading to accelerate the criterion calculation for a DGP emulator.
 #'     Turning this option on could improve the speed of criterion calculations when the DGP emulator is built with a moderately large number of
 #'     training data points and the Matérn-2.5 kernel.
-#' @param aggregate an R function that aggregates scores of the ALM across different output dimensions (if `object` is an instance
+#' @param aggregate an R function that aggregates scores of the VIGF across different output dimensions (if `object` is an instance
 #'     of the `dgp` class) or across different emulators (if `object` is an instance of the `bundle` class). The function should be specified in the
 #'     following basic form:
 #' * the first argument is a matrix representing scores. The rows of the matrix correspond to different design points. The number of columns
@@ -26,7 +26,7 @@
 #' * the output should be a vector that gives aggregations of scores at different design points.
 #'
 #' Set to `NULL` to disable the aggregation. Defaults to `NULL`.
-#' @param ... any arguments (with names different from those of arguments used in [alm()]) that are used by `aggregate`
+#' @param ... any arguments (with names different from those of arguments used in [vigf()]) that are used by `aggregate`
 #'     can be passed here.
 #'
 #' @return
@@ -47,7 +47,7 @@
 #' * Any R vector detected in `x_cand` will be treated as a column vector and automatically converted into a single-column
 #'   R matrix.
 #' @references
-#' MacKay, D. J. (1992). Information-based objective functions for active data selection. *Neural Computation*, **4(4)**, 590-604.
+#' Mohammadi, H., & Challenor, P. (2022). Sequential adaptive design for emulating costly computer codes. *arXiv:2206.12113*.
 #'
 #' @details See further examples and tutorials at <https://mingdeyu.github.io/dgpsi-R/>.
 #' @examples
@@ -72,8 +72,8 @@
 #' # generate a candidate set
 #' x_cand <- maximinLHS(200,1)
 #'
-#' # locate the next design point using ALM
-#' next_point <- alm(m, x_cand = x_cand)
+#' # locate the next design point using VIGF
+#' next_point <- vigf(m, x_cand = x_cand)
 #' X_new <- x_cand[next_point,,drop = F]
 #'
 #' # obtain the corresponding output at the located design point
@@ -90,16 +90,16 @@
 #' plot(m)
 #' }
 #' @md
-#' @name alm
+#' @name vigf
 #' @export
-alm <- function(object, x_cand, ...){
-  UseMethod("alm")
+vigf <- function(object, x_cand, ...){
+  UseMethod("vigf")
 }
 
-#' @rdname alm
-#' @method alm gp
+#' @rdname vigf
+#' @method vigf gp
 #' @export
-alm.gp <- function(object, x_cand, batch_size = 1, workers = 1, ...) {
+vigf.gp <- function(object, x_cand, batch_size = 1, workers = 1, ...) {
   if ( is.null(pkg.env$dgpsi) ) {
     init_py(verb = F)
     if (pkg.env$restart) return(invisible(NULL))
@@ -109,6 +109,7 @@ alm.gp <- function(object, x_cand, batch_size = 1, workers = 1, ...) {
   training_input <- object$data$X
   training_output <- object$data$Y
   n_dim_X <- ncol(training_input)
+  if (nrow(pkg.env$np$unique(training_input, axis=0L)) != nrow(training_input)) stop("'The function is not applicable to GP emulators whose training data contain replicates.", call. = FALSE)
   #check x_cand
   if ( !is.matrix(x_cand)&!is.vector(x_cand) ) stop("'x_cand' must be a vector or a matrix.", call. = FALSE)
   if ( is.vector(x_cand) ) x_cand <- as.matrix(x_cand)
@@ -124,9 +125,9 @@ alm.gp <- function(object, x_cand, batch_size = 1, workers = 1, ...) {
   #locate
   if ( batch_size==1 ){
     if ( identical(workers,as.integer(1)) ){
-      res = object$emulator_obj$metric(x_cand = x_cand, method = 'ALM')
+      res = object$emulator_obj$metric(x_cand = x_cand, method = 'VIGF')
     } else {
-      res = object$emulator_obj$pmetric(x_cand = x_cand, method = 'ALM', core_num = workers)
+      res = object$emulator_obj$pmetric(x_cand = x_cand, method = 'VIGF', core_num = workers)
     }
     idx <- res[[1]]+1
   } else {
@@ -136,9 +137,9 @@ alm.gp <- function(object, x_cand, batch_size = 1, workers = 1, ...) {
     constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
     for (i in 1:batch_size){
       if ( identical(workers,as.integer(1)) ){
-        res = constructor_obj_cp$metric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'ALM')
+        res = constructor_obj_cp$metric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'VIGF')
       } else {
-        res = constructor_obj_cp$pmetric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'ALM', core_num = workers)
+        res = constructor_obj_cp$pmetric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'VIGF', core_num = workers)
       }
       idx_i <- res[[1]]+1
       X_new <- x_cand[idx_x_cand,,drop=F][idx_i,,drop=F]
@@ -156,19 +157,19 @@ alm.gp <- function(object, x_cand, batch_size = 1, workers = 1, ...) {
 }
 
 
-#' @rdname alm
-#' @method alm dgp
+#' @rdname vigf
+#' @method vigf dgp
 #' @export
-alm.dgp <- function(object, x_cand, batch_size = 1, workers = 1, threading = FALSE, aggregate = NULL, ...) {
+vigf.dgp <- function(object, x_cand, batch_size = 1, workers = 1, threading = FALSE, aggregate = NULL, ...) {
   if ( is.null(pkg.env$dgpsi) ) {
     init_py(verb = F)
     if (pkg.env$restart) return(invisible(NULL))
   }
   #check class
   if ( !inherits(object,"dgp") ) stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
-  #if ( object$constructor_obj$all_layer[[object$constructor_obj$n_layer]][[1]]$type == 'likelihood' ){
-  #  stop("The function is only applicable to DGP emulators without likelihood layers.", call. = FALSE)
-  #}
+  if ( object$constructor_obj$all_layer[[object$constructor_obj$n_layer]][[1]]$type != 'likelihood' & !is.null(object$constructor_obj$indices) ){
+    stop("The function is not applicable to DGP emulators whose training data contain replicates but are without likelihood layers.", call. = FALSE)
+  }
   object$emulator_obj$set_nb_parallel(threading)
   training_input <- object$data$X
   training_output <- object$data$Y
@@ -194,9 +195,9 @@ alm.dgp <- function(object, x_cand, batch_size = 1, workers = 1, threading = FAL
   #locate
   if ( batch_size==1 ){
     if ( identical(workers,as.integer(1)) ){
-      res = object$emulator_obj$metric(x_cand = x_cand, method = 'ALM', score_only = TRUE)
+      res = object$emulator_obj$metric(x_cand = x_cand, method = 'VIGF', obj = object$constructor_obj, score_only = TRUE)
     } else {
-      res = object$emulator_obj$pmetric(x_cand = x_cand, method = 'ALM', score_only = TRUE, core_num = workers)
+      res = object$emulator_obj$pmetric(x_cand = x_cand, method = 'VIGF', obj = object$constructor_obj, score_only = TRUE, core_num = workers)
     }
     if ( is.null(aggregate) ){
       idx <- pkg.env$np$argmax(res, axis=0L) + 1
@@ -226,9 +227,9 @@ alm.dgp <- function(object, x_cand, batch_size = 1, workers = 1, threading = FAL
     isblock <- constructor_obj_cp$block
     for (i in 1:batch_size){
       if ( identical(workers,as.integer(1)) ){
-        res = emulator_obj_cp$metric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'ALM', score_only = TRUE)
+        res = emulator_obj_cp$metric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'VIGF', obj = object$constructor_obj, score_only = TRUE)
       } else {
-        res = emulator_obj_cp$pmetric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'ALM', score_only = TRUE, core_num = workers)
+        res = emulator_obj_cp$pmetric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'VIGF', obj = object$constructor_obj, score_only = TRUE, core_num = workers)
       }
       emulator_obj_cp$set_nb_parallel(FALSE)
       if ( is.null(aggregate) ){
@@ -268,10 +269,10 @@ alm.dgp <- function(object, x_cand, batch_size = 1, workers = 1, threading = FAL
 }
 
 
-#' @rdname alm
-#' @method alm bundle
+#' @rdname vigf
+#' @method vigf bundle
 #' @export
-alm.bundle <- function(object, x_cand, batch_size = 1, workers = 1, threading = FALSE, aggregate = NULL, ...) {
+vigf.bundle <- function(object, x_cand, batch_size = 1, workers = 1, threading = FALSE, aggregate = NULL, ...) {
   if ( is.null(pkg.env$dgpsi) ) {
     init_py(verb = F)
     if (pkg.env$restart) return(invisible(NULL))
@@ -285,6 +286,17 @@ alm.bundle <- function(object, x_cand, batch_size = 1, workers = 1, threading = 
   training_input <- object$data$X
   training_output <- object$data$Y
   n_dim_X <- ncol(training_input[[1]])
+  #check capability for vigf
+  for ( i in 1:n_emulators ){
+    obj_i <- object[[paste('emulator',i,sep='')]]
+    if ( inherits(obj_i,"gp") ){
+      if (nrow(pkg.env$np$unique(obj_i$data$X, axis=0L)) != nrow(obj_i$data$X)) stop("'The function is not applicable to bundle emulators that contain GP emulators whose training data have replicates.", call. = FALSE)
+    } else {
+      if ( obj_i$constructor_obj$all_layer[[obj_i$constructor_obj$n_layer]][[1]]$type != 'likelihood' & !is.null(obj_i$constructor_obj$indices) ){
+        stop("The function is not applicable to bundle emulators that contain DGP emulators whose training data have replicates but are without likelihood layers.", call. = FALSE)
+      }
+    }
+  }
   #check x_cand
   if ( !is.matrix(x_cand)&!is.vector(x_cand) ) stop("'x_cand' must be a vector or a matrix.", call. = FALSE)
   if ( is.vector(x_cand) ) x_cand <- as.matrix(x_cand)
@@ -309,14 +321,14 @@ alm.bundle <- function(object, x_cand, batch_size = 1, workers = 1, threading = 
     for ( i in 1:n_emulators ){
       obj_i <- object[[paste('emulator',i,sep='')]]
       if ( inherits(obj_i,"gp") ){
-        res = obj_i$emulator_obj$metric(x_cand = x_cand, method = 'ALM', score_only = TRUE)
+        res = obj_i$emulator_obj$metric(x_cand = x_cand, method = 'VIGF', score_only = TRUE)
         scores <- cbind(scores, res)
       } else {
         obj_i$emulator_obj$set_nb_parallel(threading)
         if ( identical(workers,as.integer(1)) ){
-          res = obj_i$emulator_obj$metric(x_cand = x_cand, method = 'ALM', score_only = TRUE)
+          res = obj_i$emulator_obj$metric(x_cand = x_cand, method = 'VIGF', obj = obj_i$constructor_obj, score_only = TRUE)
         } else {
-          res = obj_i$emulator_obj$pmetric(x_cand = x_cand, method = 'ALM', score_only = TRUE, core_num = workers)
+          res = obj_i$emulator_obj$pmetric(x_cand = x_cand, method = 'VIGF', obj = obj_i$constructor_obj, score_only = TRUE, core_num = workers)
         }
         scores <- cbind(scores, res)
       }
@@ -355,14 +367,14 @@ alm.bundle <- function(object, x_cand, batch_size = 1, workers = 1, threading = 
       for ( j in 1:n_emulators ){
         obj_j <- object[[paste('emulator',j,sep='')]]
         if ( inherits(obj_j,"gp") ){
-          res = emulator_obj_list[[j]]$metric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'ALM', score_only = TRUE)
+          res = emulator_obj_list[[j]]$metric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'VIGF', score_only = TRUE)
           scores <- cbind(scores, res)
         } else {
           emulator_obj_list[[j]]$set_nb_parallel(threading)
           if ( identical(workers,as.integer(1)) ){
-            res = emulator_obj_list[[j]]$metric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'ALM', score_only = TRUE)
+            res = emulator_obj_list[[j]]$metric(x_cand = x_cand[idx_x_cand,,drop=F], obj = emulator_obj_list[[j]]$constructor_obj, method = 'VIGF', score_only = TRUE)
           } else {
-            res = emulator_obj_list[[j]]$pmetric(x_cand = x_cand[idx_x_cand,,drop=F], method = 'ALM', score_only = TRUE, core_num = workers)
+            res = emulator_obj_list[[j]]$pmetric(x_cand = x_cand[idx_x_cand,,drop=F], obj = emulator_obj_list[[j]]$constructor_obj, method = 'VIGF', score_only = TRUE, core_num = workers)
           }
           emulator_obj_list[[j]]$set_nb_parallel(FALSE)
           scores <- cbind(scores, if(ncol(res) == 1) res else rowMeans(res))

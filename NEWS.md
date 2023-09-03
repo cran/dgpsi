@@ -1,3 +1,18 @@
+# dgpsi 2.3.0
+- A bug from the underlying Python implementations is fixed when `name = matern2.5` in `gp()` and `dgp()`.
+- Thanks to @yyimingucl, a bug from the underlying Python implementations for the MICE sequential design criterion `mice()` is fixed.
+- An argument `reset` is added to `update()` and `design()` to reset hyperparameters of a (D)GP emulator to their initial values (that were specified when the emulator is initialized) after the input and output of the emulator are updated and before the emulator is refitted. This argument can be useful for sequential designs in cases where the hyperparameters of a (D)GP emulator get caught in suboptimal estimates. In such circumstances, one can set `reset = TRUE` to reinitialize the (D)GP emulator in some steps of the sequential designs as a strategy to escape the poor estimates.
+- The refitting of an emulator in the final step of a sequential design is no longer forced in `design()`. 
+- An argument `type` is added to `plot()` to allow users to draw OOS validation plots with testing data shown as a line instead of individual points when the emulator's input is one-dimensional and `style = 1`.
+- Thanks to @tjmckinley, an issue relating to `libstdc++.so.6` on Linux machines when R is restarting after the installation of the package is fixed.
+- `alm()` and `mice()` can locate new design points for stochastic simulators with (D)GP or bundle emulators that can deal with stochastic outputs.
+- `design()` can be used to construct (D)GP or bundle emulators adaptively by utilizing multiple realizations from a stochastic simulator at the same design positions through the new argument `reps` when `method = alm` or `method = mice`.
+- A new slot called `specs` is added to the objects returned by `gp()` and `dgp()` that contains the key information of the kernel functions used in the constructions of GP and DGP emulators.
+- Due to a bug in the latest version of an underlying Python package, the emulators saved by `write()` in version `2.1.6` and `2.2.0` may not work properly with `update()` and `design()` when they are loaded back by `read()` in this version. This bug has been addressed in this version so emulators saved in this version would not have the compatibility issue in future version.
+- A new sequential design criterion, called the Variance of Improvement for Global Fit (VIGF), is added to the package with the function `vigf()`.
+- The sampling from an existing candidate set `x_cand` in `design()` is changed from a random sampling to a conditioned Latin Hypercube sampling in `clhs` package.
+- The python environment is now automatically installed or invoked when a function from the package is executed. One does not need to run `init_py()` to activate the required python environment but `init_py()` is still useful to re-install and uninstall the underlying python environment. A `verb` argument is added to `init_py()` to switch on/off the trace information.
+
 # dgpsi 2.2.0
 
 - The efficiency and speed of imputations involved in the training and predictions of DGP emulators are significantly improved (achieving roughly 3x faster training and imputations) by utilizing blocked Gibbs sampling that imputes latent variables layer-wise rather than node-wise. The blocked Gibbs sampling is now the default method for DGP emulator inference and can be changed back to the old node-wise approach by setting `blocked_gibbs = FALSE` in `dgp()`.

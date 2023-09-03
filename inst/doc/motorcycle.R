@@ -8,7 +8,6 @@ knitr::opts_chunk$set(
 #  library(dgpsi)
 #  library(MASS)
 #  library(patchwork)
-#  init_py()
 
 ## -----------------------------------------------------------------------------
 #  X <- mcycle$times
@@ -26,7 +25,6 @@ knitr::opts_chunk$set(
 
 ## -----------------------------------------------------------------------------
 #  test_idx <- sample(seq_len(length(X)), size = 20)
-#  
 #  train_X <- X[-test_idx]
 #  train_Y <- Y[-test_idx,]
 #  test_x <- X[test_idx]

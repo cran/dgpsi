@@ -14,6 +14,6 @@
   packageStartupMessage("             Maintainer: Deyu Ming (deyu.ming.16@ucl.ac.uk)")
   packageStartupMessage("============================================================================")
   packageStartupMessage("----------------------------------------------------------------------------")
-  packageStartupMessage("        Please run init_py() everytime after the package is loaded.")
+  packageStartupMessage(" Run a function from the package to install/activate the Python environment ")
   packageStartupMessage("----------------------------------------------------------------------------")
 }

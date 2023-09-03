@@ -76,7 +76,10 @@ Set to \code{NULL} to disable the aggregation. Defaults to \code{NULL}.}
 of next design points from \code{x_cand}.
 \item If \code{object} is an instance of the \code{dgp} class, a matrix is returned with row number equal to \code{batch_size} and column number equal to one (if \code{aggregate}
 is not \code{NULL}) or the output dimension (if \code{aggregate} is \code{NULL}), giving positions (i.e., row numbers) of next design points from \code{x_cand} to be added
-to the DGP emulator across different outputs.
+to the DGP emulator across different outputs. If \code{object} is a DGP emulator with either \code{Hetero} or \code{NegBin} likelihood layer, the returned matrix has
+two columns with the first column giving positions of next design points from \code{x_cand} that correspond to the mean parameter of the normal or negative Binomial
+distribution, and the second column giving positions of next design points from \code{x_cand} that correspond to the variance parameter of the normal distribution or
+the dispersion parameter of the negative Binomial distribution.
 \item If \code{object} is an instance of the \code{bundle} class, a matrix is returned with row number equal to \code{batch_size} and column number equal to the number of
 emulators in the bundle, giving positions (i.e., row numbers) of next design points from \code{x_cand} to be added to individual emulators.
 }
@@ -92,7 +95,6 @@ See further examples and tutorials at \url{https://mingdeyu.github.io/dgpsi-R/}.
 \itemize{
 \item The column order of the first argument of \code{aggregate} must be consistent with the order of emulator output dimensions (if \code{object} is an instance of the
 \code{dgp} class), or the order of emulators placed in \code{object} if \code{object} is an instance of the \code{bundle} class;
-\item The function is only applicable to DGP emulators without likelihood layers.
 \item Any R vector detected in \code{x_cand} will be treated as a column vector and automatically converted into a single-column
 R matrix.
 }
@@ -103,7 +105,6 @@ R matrix.
 # load packages and the Python env
 library(lhs)
 library(dgpsi)
-init_py()
 
 # construct a 1D non-stationary function
 f <- function(x) {

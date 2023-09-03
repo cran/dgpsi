@@ -58,7 +58,6 @@
 #' # load packages and the Python env
 #' library(lhs)
 #' library(dgpsi)
-#' init_py()
 #'
 #' # construct a 1D non-stationary function
 #' f <- function(x) {
@@ -103,6 +102,10 @@ pei <- function(object, x_cand, ...){
 #' @method pei gp
 #' @export
 pei.gp <- function(object, x_cand, pseudo_points = NULL, batch_size = 1, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"gp") ) stop("'object' must be an instance of the 'gp' class.", call. = FALSE)
   training_input <- object$data$X
@@ -165,10 +168,14 @@ pei.gp <- function(object, x_cand, pseudo_points = NULL, batch_size = 1, ...) {
 #' @method pei dgp
 #' @export
 pei.dgp <- function(object, x_cand, pseudo_points = NULL, batch_size = 1, workers = 1, threading = FALSE, aggregate = NULL, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"dgp") ) stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
   if ( object$constructor_obj$all_layer[[object$constructor_obj$n_layer]][[1]]$type == 'likelihood' ){
-    stop("The function is only applicable to DGP emulators without likelihood layers.", call. = FALSE)
+    stop("pei() is only applicable to DGP emulators without likelihood layers.", call. = FALSE)
   }
   object$emulator_obj$set_nb_parallel(threading)
   training_input <- object$data$X
@@ -280,6 +287,10 @@ pei.dgp <- function(object, x_cand, pseudo_points = NULL, batch_size = 1, worker
 #' @method pei bundle
 #' @export
 pei.bundle <- function(object, x_cand, pseudo_points = NULL, batch_size = 1, workers = 1, threading = FALSE, aggregate = NULL, ...) {
+  if ( is.null(pkg.env$dgpsi) ) {
+    init_py(verb = F)
+    if (pkg.env$restart) return(invisible(NULL))
+  }
   #check class
   if ( !inherits(object,"bundle") ) stop("'object' must be an instance of the 'bundle' class.", call. = FALSE)
   #check no of emulators
@@ -341,6 +352,9 @@ pei.bundle <- function(object, x_cand, pseudo_points = NULL, batch_size = 1, wor
     if ( inherits(obj_i,"gp") ){
       score <- log(obj_i$emulator_obj$esloo())
     } else {
+      if ( obj_i$constructor_obj$all_layer[[obj_i$constructor_obj$n_layer]][[1]]$type == 'likelihood' ){
+        stop("pei() is only applicable to bundles that contain DGP emulators without likelihood layers.", call. = FALSE)
+      }
       obj_i$emulator_obj$set_nb_parallel(threading)
       if ( identical(workers,as.integer(1)) ){
         score <- log(obj_i$emulator_obj$esloo(training_input[[i]], training_output[[i]]))

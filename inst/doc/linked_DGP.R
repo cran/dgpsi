@@ -5,8 +5,9 @@ knitr::opts_chunk$set(
 )
 
 ## -----------------------------------------------------------------------------
+#  library(ggplot2)
+#  library(patchwork)
 #  library(dgpsi)
-#  init_py()
 
 ## -----------------------------------------------------------------------------
 #  # Model 1
@@ -78,39 +79,20 @@ knitr::opts_chunk$set(
 #  test_x <- seq(0, 1, length = 300)
 #  # Testing output
 #  test_y <- sapply(test_x, f123)
+#  # Validate GP emulator
+#  m_gp <- validate(m_gp, x_test = test_x, y_test = test_y, verb = F)
+#  # Validate linked emulator
+#  m_link <- validate(m_link, x_test = test_x, y_test = test_y, verb = F)
 
 ## -----------------------------------------------------------------------------
-#  # linked emulator
-#  m_link <- predict(m_link, x = test_x)
 #  # GP emulator
-#  m_gp <- predict(m_gp, x = test_x)
+#  plot(m_gp, x_test = test_x, y_test = test_y, type = 'line', verb = F) +
+#    plot_annotation(title = 'GP Emulator', theme = theme(plot.title = element_text(hjust = 0.5)))
 
 ## -----------------------------------------------------------------------------
-#  # extract predictive means and variances from the linked emulator
-#  mu <- m_link$results$mean$emulator1
-#  sd <- sqrt(m_link$results$var$emulator1)
-#  up <- mu + 2*sd
-#  lo <- mu - 2*sd
-#  
-#  # extract predictive means and variances from the GP emulator
-#  mu_gp <- m_gp$results$mean
-#  sd_gp <- sqrt(m_gp$results$var)
-#  up_gp <- mu_gp + 2*sd_gp
-#  lo_gp <- mu_gp - 2*sd_gp
-#  
-#  par(cex=0.7, mar = c(5, 5, 0.9, 0.9)+0.2)
-#  # GP emulator
-#  par(fig = c(0, 0.5, 0.2, 0.8))
-#  plot(test_x, mu_gp, type = 'l', lty = 2, lwd = 1.5, col = 'black', main = "GP Emulator", xlab = 'x1', ylab = 'y3', ylim=c(-0.1,0.65))
-#  polygon(c(test_x, rev(test_x)), c(up_gp, rev(lo_gp)), col = 'grey80', border = F)
-#  lines(test_x, test_y, type = 'l', col = "#D55E00", lwd = 2)
-#  lines(test_x, mu_gp, type = 'l', lty = 2, lwd = 1.5, col = 'black')
-#  # linked emulator
-#  par(fig = c(0.5, 1, 0.2, 0.8), new = TRUE)
-#  plot(test_x, mu, type = 'l', lty = 2, lwd = 1.5, col = 'black', main = "Linked Emulator", xlab = 'x1', ylab = 'y3', ylim=c(-0.1,0.65))
-#  polygon(c(test_x, rev(test_x)), c(up, rev(lo)), col = 'grey80', border = F)
-#  lines(test_x, test_y, type = 'l', col = "#D55E00", lwd = 2)
-#  lines(test_x, mu, type = 'l', lty = 2, lwd = 1.5, col = 'black')
+#  # Linked emulator
+#  plot(m_link, x_test = test_x, y_test = test_y, type = 'line', verb = F) +
+#    plot_annotation(title = 'Linked Emulator', theme = theme(plot.title = element_text(hjust = 0.5)))
 
 ## -----------------------------------------------------------------------------
 #  # OOS testing input

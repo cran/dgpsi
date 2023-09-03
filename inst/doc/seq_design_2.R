@@ -9,7 +9,6 @@ knitr::opts_chunk$set(
 #  library(ggplot2)
 #  library(patchwork)
 #  library(dgpsi)
-#  init_py()
 
 ## -----------------------------------------------------------------------------
 #  f <- function(x) {

@@ -9,7 +9,6 @@ knitr::opts_chunk$set(
 #  library(lhs)
 #  library(ggplot2)
 #  library(dgpsi)
-#  init_py()
 
 ## -----------------------------------------------------------------------------
 #  f <- function(x) {
@@ -45,15 +44,15 @@ knitr::opts_chunk$set(
 
 ## -----------------------------------------------------------------------------
 #  # 1st wave with 15 steps
-#  m <- design(m, N=15, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
+#  m <- design(m, N = 15, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
 
 ## -----------------------------------------------------------------------------
 #  # 2nd wave with 10 steps
-#  m <- design(m, N=10, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
+#  m <- design(m, N = 10, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
 
 ## -----------------------------------------------------------------------------
 #  # 3rd wave with 10 steps
-#  m <- design(m, N=10, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
+#  m <- design(m, N = 10, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
 
 ## -----------------------------------------------------------------------------
 #  draw(m, 'design')

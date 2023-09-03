@@ -6,10 +6,10 @@
   [![REF](https://img.shields.io/badge/REF-Linked%20GP-informational)](https://doi.org/10.1137/20M1323771)
   [![REF](https://img.shields.io/badge/REF-Deep%20GP-informational)](https://doi.org/10.1080/00401706.2022.2124311)
   [![REF](https://img.shields.io/badge/REF-Linked%20DGP-informational)](https://arxiv.org/abs/2306.01212)
-  [![python](https://img.shields.io/badge/Python-dgpsi%20v2.2.0-informational)](https://github.com/mingdeyu/DGP)
+  [![python](https://img.shields.io/badge/Python-dgpsi%20v2.3.0-informational)](https://github.com/mingdeyu/DGP)
   ![CRAN_License](https://img.shields.io/cran/l/dgpsi?color=green)
   
-The R package `dgpsi` provides R interface to Python package [`dgpsi`](https://github.com/mingdeyu/DGP) for deep and linked Gaussian process emulations. 
+The R package `dgpsi` provides R interface to Python package [`dgpsi`](https://github.com/mingdeyu/DGP) for deep and linked Gaussian process emulations using stochastic imputation (SI). 
 
 > **Hassle-free Python Setup**  
 > You don't need prior knowledge of Python to start using the package, all you need is a single click in R (see [Installation](#installation) section below) that automatically installs and activates the required Python environment for you!
@@ -31,7 +31,7 @@ The R package `dgpsi` provides R interface to Python package [`dgpsi`](https://g
 
 ## Getting started
 * Check [A Quick Guide to dgpsi](https://mingdeyu.github.io/dgpsi-R/articles/dgpsi.html) to get started with the package.
-* For experimental features, check out our [website](https://mingdeyu.github.io/dgpsi-R/dev/) for the development version.
+* For experimental features, check out our [website for the development version](https://mingdeyu.github.io/dgpsi-R/dev/).
 
 ## Installation
 You can install the package from CRAN:
@@ -50,31 +50,31 @@ After the installation, run
 
 ```r
 library(dgpsi)
-init_py()
 ```
 
-to install and activate the required Python environment. That's it, the package is now ready to use!
+to load the package. To install or activate the required Python environment automatically, simply run a function from the package. That's it, the package is now ready to use!
 
 > **Note**  
-> Always run `init_py()` after `library(dgpsi)`, telling R to invoke the required Python environment.
-> 
-> If you experience issues while running `init_py()`, please try to reinstall the Python environment:    
+> After loading `dgpsi`, the package may take some time to compile and initiate the underlying Python environment the first
+> time a function from `dgpsi` is executed. Any subsequent function calls won't require re-compiling or re-activation of the 
+> Python environment, and will be faster.
+>
+> If you experience Python related issues while using the package, please try to reinstall the Python environment:    
 > 
 > ```r
 > dgpsi::init_py(reinstall = T)
 > ```
 > 
-> or uninstall completely the Python environment:
+> Or uninstall completely the Python environment:
 > 
 > ```r
 > dgpsi::init_py(uninstall = T)
 > ```
 > 
-> And then restart the R and rerun:
+> and then reinstall:
 >
 > ```r
-> library(dgpsi)
-> init_py()
+> dgpsi::init_py()
 > ```
 
 ## References
