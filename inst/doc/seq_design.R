@@ -43,16 +43,16 @@ knitr::opts_chunk$set(
 #  lim <- rbind(lim_1, lim_2)
 
 ## -----------------------------------------------------------------------------
-#  # 1st wave with 15 steps
-#  m <- design(m, N = 15, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
+#  # 1st wave with 25 steps
+#  m <- design(m, N = 25, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
 
 ## -----------------------------------------------------------------------------
 #  # 2nd wave with 10 steps
 #  m <- design(m, N = 10, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
 
 ## -----------------------------------------------------------------------------
-#  # 3rd wave with 10 steps
-#  m <- design(m, N = 10, limits = lim, f = f, x_test = validate_x, y_test = validate_y)
+#  # 2nd wave with 10 additional steps
+#  m <- design(m, N = 10, limits = lim, f = f, x_test = validate_x, y_test = validate_y, new_wave = FALSE)
 
 ## -----------------------------------------------------------------------------
 #  draw(m, 'design')
@@ -85,6 +85,12 @@ knitr::opts_chunk$set(
 #  m4 <- dgp(X4, Y4, verb = F)
 
 ## -----------------------------------------------------------------------------
+#  # DGP emulator with a LHD of size 50
+#  X5 <- maximinLHS(50,2)
+#  Y5 <- f(X5)
+#  m5 <- dgp(X5, Y5, verb = F)
+
+## -----------------------------------------------------------------------------
 #  # validation of the DGP emulator with the LHD of size 10
 #  m1 <- validate(m1, x_test = validate_x, y_test = validate_y, verb = F)
 #  rmse1 <- m1$oos$rmse
@@ -97,11 +103,14 @@ knitr::opts_chunk$set(
 #  # validation of the DGP emulator with the LHD of size 40
 #  m4 <- validate(m4, x_test = validate_x, y_test = validate_y, verb = F)
 #  rmse4 <- m4$oos$rmse
+#  # validation of the DGP emulator with the LHD of size 50
+#  m5 <- validate(m5, x_test = validate_x, y_test = validate_y, verb = F)
+#  rmse5 <- m5$oos$rmse
 #  # create a dataframe that stores the RMSEs of the four DGP emulators
-#  rmse_static <- data.frame('N' = c(10, 20, 30, 40), 'rmse' = c(rmse1, rmse2, rmse3, rmse4), 'LHD' = c('lhd-10', 'lhd-20', 'lhd-30', 'lhd-40'))
+#  rmse_static <- data.frame('N' = c(10, 20, 30, 40, 50), 'rmse' = c(rmse1, rmse2, rmse3, rmse4, rmse5), 'LHD' = c('lhd-10', 'lhd-20', 'lhd-30', 'lhd-40', 'lhd-50'))
 
 ## -----------------------------------------------------------------------------
 #  draw(m, 'rmse', log = T) +
 #    geom_point(data = rmse_static, mapping = aes(x = N, y = rmse, group = LHD, shape = LHD), color = '#E69F00', size = 1.5) +
-#    scale_shape_manual(values = c(2, 3, 4, 8))
+#    scale_shape_manual(values = c(2, 3, 4, 8, 15))
 

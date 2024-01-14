@@ -34,6 +34,7 @@
 #'   - `loo` and `oos` created by [validate()];
 #'   - `results` created by [predict()]; and
 #'   - `design` created by [design()]
+#'
 #'   in `object` will be removed and not contained in the returned object.
 #' * Any R vector detected in `X` and `Y` will be treated as a column vector and automatically converted into a single-column
 #'   R matrix. Thus, if `X` is a single data point with multiple dimensions, it must be given as a matrix.
@@ -41,7 +42,7 @@
 #' @examples
 #' \dontrun{
 #'
-#' # See alm(), mice() or pei() for an example.
+#' # See alm(), mice(), pei(), or vigf() for an example.
 #' }
 #' @md
 #' @name update
@@ -85,7 +86,13 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
   linked_idx <- object$container_obj$local_input_idx
 
   if ( verb ) message("Updating ...", appendLF = FALSE)
-  constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
+
+  if ("update_in_design" %in% names(list(...))) {
+    constructor_obj_cp <- object$constructor_obj
+  } else {
+    constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
+  }
+
   constructor_obj_cp$update_xy(X, Y, reset)
   if ( verb ) {
     Sys.sleep(0.2)
@@ -101,9 +108,9 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
     }
     N0 <- constructor_obj_cp$N
     if ( identical(cores,as.integer(1)) ){
-      constructor_obj_cp$train(N, ess_burn, disable)
+      with(pkg.env$np$errstate(divide = 'ignore'), constructor_obj_cp$train(N, ess_burn, disable))
     } else {
-      constructor_obj_cp$ptrain(N, ess_burn, disable, cores)
+      with(pkg.env$np$errstate(divide = 'ignore'), constructor_obj_cp$ptrain(N, ess_burn, disable, cores))
     }
     burnin <- as.integer(N0 + 0.75*N)
   } else {
@@ -114,6 +121,7 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
   est_obj <- constructor_obj_cp$estimate(burnin)
 
   new_object <- list()
+  new_object[['id']] <- object$id
   new_object[['data']][['X']] <- unname(X)
   new_object[['data']][['Y']] <- unname(Y)
   new_object[['specs']] <- extract_specs(est_obj, "dgp")
@@ -121,13 +129,20 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
     new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
     new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
   }
+  new_object[['specs']][['linked_idx']] <- if ( is.null(linked_idx) ) FALSE else linked_idx_py_to_r(linked_idx)
   new_object[['constructor_obj']] <- constructor_obj_cp
+  id <- sample.int(100000, 1)
+  set_seed(id)
   new_object[['emulator_obj']] <- pkg.env$dgpsi$emulator(all_layer = est_obj, N = B, block = isblock)
   new_object[['container_obj']] <- pkg.env$dgpsi$container(est_obj, linked_idx, isblock)
+  new_object[['specs']][['seed']] <- id
+  new_object[['specs']][['B']] <- B
   class(new_object) <- "dgp"
   if ( isTRUE(verb) ) message(" done")
-  pkg.env$py_gc$collect()
-  gc(full=T)
+  if (! "update_in_design" %in% names(list(...))) {
+    pkg.env$py_gc$collect()
+    gc(full=T)
+  }
   return(new_object)
 }
 
@@ -157,7 +172,11 @@ update.gp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, .
   linked_idx <- object$container_obj$local_input_idx
 
   if ( verb ) message("Updating ...", appendLF = FALSE)
-  constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
+  if ("update_in_design" %in% names(list(...))) {
+    constructor_obj_cp <- object$constructor_obj
+  } else {
+    constructor_obj_cp <- pkg.env$copy$deepcopy(object$constructor_obj)
+  }
   constructor_obj_cp$update_xy(X, Y, reset)
   if ( verb ) {
     Sys.sleep(0.5)
@@ -166,11 +185,12 @@ update.gp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, .
 
   if ( refit ){
     if ( verb ) message("Re-fitting ...", appendLF = FALSE)
-    constructor_obj_cp$train()
+    with(pkg.env$np$errstate(divide = 'ignore'), constructor_obj_cp$train())
     if ( verb ) message(" done")
   }
 
   new_object <- list()
+  new_object[['id']] <- object$id
   new_object[['data']][['X']] <- unname(X)
   new_object[['data']][['Y']] <- unname(Y)
   new_object[['specs']] <- extract_specs(constructor_obj_cp, "gp")
@@ -178,15 +198,21 @@ update.gp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, .
     new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
     new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
   }
+  new_object[['specs']][['linked_idx']] <- if ( is.null(linked_idx) ) FALSE else linked_idx_py_to_r(linked_idx)
   new_object[['constructor_obj']] <- constructor_obj_cp
   new_object[['container_obj']] <- pkg.env$dgpsi$container(constructor_obj_cp$export(), linked_idx)
   new_object[['emulator_obj']] <- constructor_obj_cp
   class(new_object) <- "gp"
-
-  pkg.env$py_gc$collect()
-  gc(full=T)
+  if (! "update_in_design" %in% names(list(...))) {
+    pkg.env$py_gc$collect()
+    gc(full=T)
+  }
   return(new_object)
 }
 
+copy_in_design <- function(object){
+  object$constructor_obj <- pkg.env$copy$deepcopy(object$constructor_obj)
+  return(object)
+}
 
 

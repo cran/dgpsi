@@ -25,7 +25,8 @@ design(
   method,
   eval,
   verb,
-  check_point,
+  autosave,
+  new_wave,
   cores,
   ...
 )
@@ -45,10 +46,11 @@ design(
   y_test = NULL,
   reset = FALSE,
   target = NULL,
-  method = mice,
+  method = vigf,
   eval = NULL,
   verb = TRUE,
-  check_point = NULL,
+  autosave = list(),
+  new_wave = TRUE,
   cores = 1,
   ...
 )
@@ -68,13 +70,16 @@ design(
   y_test = NULL,
   reset = FALSE,
   target = NULL,
-  method = mice,
+  method = vigf,
   eval = NULL,
   verb = TRUE,
-  check_point = NULL,
+  autosave = list(),
+  new_wave = TRUE,
   cores = 1,
   train_N = 100,
   refit_cores = 1,
+  pruning = TRUE,
+  control = list(),
   ...
 )
 
@@ -93,10 +98,11 @@ design(
   y_test = NULL,
   reset = FALSE,
   target = NULL,
-  method = mice,
+  method = vigf,
   eval = NULL,
   verb = TRUE,
-  check_point = NULL,
+  autosave = list(),
+  new_wave = TRUE,
   cores = 1,
   train_N = 100,
   refit_cores = 1,
@@ -131,9 +137,8 @@ Defaults to \code{200}.}
 
 \item{limits}{a two-column matrix that gives the ranges of each input dimension, or a vector of length two if there is only one
 input dimension. If a vector is provided, it will be converted to a two-column row matrix. The rows of the matrix correspond to input
-dimensions, and its first and second columns correspond to the minimum and maximum values of the input dimensions. If
-\code{limits = NULL}, the ranges of input dimensions will be determined from the training data contained in \code{object}. This argument
-is used when \code{x_cand = NULL} and \code{y_cand = NULL}. Defaults to \code{NULL}.}
+dimensions, and its first and second columns correspond to the minimum and maximum values of the input dimensions. Set
+\code{limits = NULL} if \code{x_cand} is supplied. This argument is only used when \code{x_cand} is not supplied, i.e., \code{x_cand = NULL}. Defaults to \code{NULL}.}
 
 \item{int}{a bool or a vector of bools that indicates if an input dimension is an integer type. If a bool is given, it will be applied to
 all input dimensions. If a vector is provided, it should have a length equal to the input dimensions and will be applied to individual
@@ -150,7 +155,9 @@ only one output dimension, the matrix still needs to be returned with a single c
 of any arguments with the same names passed via \code{...}. The list output can be useful if some additional arguments of \code{f} and \code{aggregate}
 need to be updated after each step of the sequential design.
 }
-}}
+}
+
+See \emph{Note} section below for further information. This argument is used when \code{y_cand = NULL}. Defaults to \code{NULL}.}
 
 \item{reps}{an integer that gives the number of repetitions of the located design points to be created and used for evaluations of \code{f}. Set the
 argument to an integer greater than \code{1} if \code{f} is a stochastic function that can generate different responses given a same input and the
@@ -202,7 +209,7 @@ points to be added to individual emulators in the bundle.
 }
 }
 
-See \code{\link[=alm]{alm()}}, \code{\link[=mice]{mice()}}, and \code{\link[=pei]{pei()}} for examples on customizing \code{method}. Defaults to \code{\link[=mice]{mice()}}.}
+See \code{\link[=alm]{alm()}}, \code{\link[=mice]{mice()}}, \code{\link[=pei]{pei()}}, and \code{\link[=vigf]{vigf()}} for examples on customizing \code{method}. Defaults to \code{\link[=vigf]{vigf()}}.}
 
 \item{eval}{an R function that calculates the customized evaluating metric of the emulator. The function must satisfy the following basic rules:
 \itemize{
@@ -227,9 +234,22 @@ If no customized function is provided, the built-in evaluation metric, RMSE, wil
 \item{verb}{a bool indicating if the trace information will be printed during the sequential design.
 Defaults to \code{TRUE}.}
 
-\item{check_point}{a vector of integers that indicates at which steps the sequential design will pause and ask for the confirmation
-from the user if the sequential design should continue or be terminated. Set to \code{NULL} to suspend the manual intervention. Defaults
-to \code{NULL}.}
+\item{autosave}{a list that contains configuration settings for the automatic saving of the emulator:
+\itemize{
+\item \code{switch}: a bool indicating whether to enable the automatic saving of the emulator during the sequential design. When set to \code{TRUE},
+the emulator in the final iteration is always saved. Defaults to \code{FALSE}.
+\item \code{directory}: a string specifying the directory path where the emulators will be stored. Emulators will be stored in a sub-directory
+of \code{directory} named 'emulator-\code{id}'. Defaults to './check_points'.
+\item \code{fname}: a string representing the base name for the saved emulator files. Defaults to 'check_point'.
+\item \code{freq}: an integer indicating the frequency of automatic savings, measured in the number of iterations. Defaults to \code{5}.
+\item \code{overwrite}: a bool value controlling the file saving behavior. When set to \code{TRUE}, each new automatic saving overwrites the previous one,
+keeping only the latest version. If \code{FALSE}, each automatic saving creates a new file, preserving all previous versions. Defaults to \code{FALSE}.
+}}
+
+\item{new_wave}{a bool indicating if the current execution of \code{\link[=design]{design()}} will create a new wave of sequential designs or add the sequential designs to
+the last existing wave. This argument is only used if there are waves existing in the emulator. By creating new waves, one can better visualize the performance
+of the sequential designs in different executions of \code{\link[=design]{design()}} in \code{\link[=draw]{draw()}} and can specify a different evaluation frequency in \code{freq}. However, it can be
+beneficiary to turn this option off to restrict a large number of waves to be visualized in \code{\link[=draw]{draw()}} that could run out of colors. Defaults to \code{TRUE}.}
 
 \item{cores}{an integer that gives the number of cores to be used for emulator validations. If set to \code{NULL}, the number of cores is
 set to \verb{(max physical cores available - 1)}. Defaults to \code{1}. This argument is only used if \code{eval = NULL}.}
@@ -250,6 +270,20 @@ Defaults to \code{100}.}
 at each M-step during the re-fitting. If set to \code{NULL}, the number of cores is set to \verb{(max physical cores available - 1)}.
 Only use multiple cores when there is a large number of GP components in different layers and optimization of GP components
 is computationally expensive. Defaults to \code{1}.}
+
+\item{pruning}{a bool indicating if dynamic pruning of DGP structures will be implemented during the sequential design after the total number of
+design points exceeds \code{min_size} in \code{control}. The argument is only applicable to DGP emulators (i.e., \code{object} is an instance of \code{dgp} class)
+produced by \code{dgp()} with \code{struc = NULL}. Defaults to \code{TRUE}.}
+
+\item{control}{a list that can supply any of the following components to control the dynamic pruning of the DGP emulator:
+\itemize{
+\item \code{min_size}, the minimum number of design points required to trigger the dynamic pruning. Defaults to 10 times of the input dimensions.
+\item \code{threshold}, the R2 value above which a GP node is considered redundant. Defaults to \code{0.97}.
+\item \code{nexceed}, the minimum number of consecutive iterations that the R2 value of a GP node must exceed \code{threshold} to trigger the removal of that node from
+the DGP structure. Defaults to \code{3}.
+}
+
+The argument is only used when \code{pruning = TRUE}.}
 }
 \value{
 An updated \code{object} is returned with a slot called \code{design} that contains:
@@ -275,10 +309,13 @@ class) that indicate if the target RMSEs are reached at the end of the sequentia
 }
 \item a slot called \code{type} that gives the type of validations:
 \itemize{
-\item either LOO (\code{loo}) or OOS (\code{oos}) if \code{eval = NULL}. See \code{\link[=validate]{validate()}} for more information about LOO and OOS.
-\item the customized R function provided to \code{eval}.
+\item either LOO ('loo') or OOS ('oos') if \code{eval = NULL}. See \code{\link[=validate]{validate()}} for more information about LOO and OOS.
+\item 'customized' if a customized R function is provided to \code{eval}.
 }
-\item two slots called \code{x_test} and \code{y_test} that contain the data points for the OOS validation if the \code{type} slot is \code{oos}.
+\item two slots called \code{x_test} and \code{y_test} that contain the data points for the OOS validation if the \code{type} slot is 'oos'.
+\item If \code{y_cand = NULL} and there are \code{NA}s returned from the supplied \code{f} during the sequential design, a slot called \code{exclusion} is included
+that records the located design positions that produced \code{NA}s via \code{f}. The sequential design will use this information to
+avoid re-visiting the same locations (if \code{x_cand} is supplied) or their neighborhoods (if \code{x_cand} is \code{NULL}) in later runs of \code{design()}.
 }
 
 See \emph{Note} section below for further information.
@@ -296,15 +333,17 @@ See further examples and tutorials at \url{https://mingdeyu.github.io/dgpsi-R/}.
 depending on whether \code{x_test} and \code{y_test} are provided. The new slot gives the validation information of the emulator constructed in the final step of
 the sequential design. See \code{\link[=validate]{validate()}} for more information about the slots \code{loo} and \code{oos}.
 \item If \code{object} has previously been used by \code{\link[=design]{design()}} for sequential designs, the information of the current wave of the sequential design will replace
-those of old waves and be contained in the returned object, unless the following conditions are met:
+those of old waves and be contained in the returned object, unless
 \itemize{
-\item the validation type (\code{loo}, \code{oos}, or the customized function provided to \code{eval}) of the current wave of the sequential design is the same as the
-validation types in previous waves, and
-\item if the validation type is OOS, \code{x_test} and \code{y_test} in the current wave of the sequential design are identical to those in the previous waves.
+\item the validation type (LOO or OOS depending on whether \code{x_test} and \code{y_test} are supplied or not) of the current wave of the sequential design is the
+same as the validation types (shown in the \code{type} of the \code{design} slot of \code{object}) in previous waves, and if the validation type is OOS,
+\code{x_test} and \code{y_test} in the current wave must also be identical to those in the previous waves;
+\item both the current and previous waves of the sequential design supply customized evaluation functions to \code{eval}. Users need to ensure the customized evaluation
+functions are consistent among different waves. Otherwise, the trace plot of RMSEs produced by \code{\link[=draw]{draw()}} will show values of different evaluation metrics in
+different waves.
 }
 
-When the above conditions are met, the information of the current wave of the sequential design will be added to
-the \code{design} slot of the returned object under the name \code{waveS}.
+In above two cases, the information of the current wave of the sequential design will be added to the \code{design} slot of the returned object under the name \code{waveS}.
 \item If \code{object} is an instance of the \code{gp} class and \code{eval = NULL}, the matrix in the \code{rmse} slot is single-columned. If \code{object} is an instance of
 the \code{dgp} or \code{bundle} class and \code{eval = NULL}, the matrix in the \code{rmse} slot can have multiple columns that correspond to different output dimensions
 or different emulators in the bundle.
@@ -319,6 +358,9 @@ to that of the output from \code{eval}.
 \item the column order of the output matrix of \code{f} is consistent with the order of emulator output dimensions (if \code{object} is an instance of the \code{dgp} class),
 or the order of emulators placed in \code{object} (if \code{object} is an instance of the \code{bundle} class).
 }
+\item The output matrix produced by \code{f} may include \code{NA}s. This is especially beneficial as it allows the sequential design process to continue without interruption,
+even if errors or \code{NA} outputs are encountered from \code{f} at certain input locations identified by the sequential designs. Users should ensure to handle any errors
+within \code{f} by appropriately returning \code{NA}s.
 \item When defining \code{eval}, the output metric needs to be positive if \code{\link[=draw]{draw()}} is used with \code{log = T}. And one needs to ensure that a lower metric value indicates
 a better emulation performance if \code{target} is set.
 \item Any R vector detected in \code{x_test} and \code{y_test} will be treated as a column vector and automatically converted into a single-column
@@ -369,7 +411,7 @@ draw(m,'design')
 draw(m,'rmse')
 
 # reduce the number of imputations for faster OOS
-m_faster <- set_imp(m, 10)
+m_faster <- set_imp(m, 5)
 
 # plot the OOS validation with the faster DGP emulator
 plot(m_faster, x_test = validate_x, y_test = validate_y)

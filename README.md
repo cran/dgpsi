@@ -6,7 +6,7 @@
   [![REF](https://img.shields.io/badge/REF-Linked%20GP-informational)](https://doi.org/10.1137/20M1323771)
   [![REF](https://img.shields.io/badge/REF-Deep%20GP-informational)](https://doi.org/10.1080/00401706.2022.2124311)
   [![REF](https://img.shields.io/badge/REF-Linked%20DGP-informational)](https://arxiv.org/abs/2306.01212)
-  [![python](https://img.shields.io/badge/Python-dgpsi%20v2.3.0-informational)](https://github.com/mingdeyu/DGP)
+  [![python](https://img.shields.io/badge/Python-dgpsi%20v2.4.0-informational)](https://github.com/mingdeyu/DGP)
   ![CRAN_License](https://img.shields.io/cran/l/dgpsi?color=green)
   
 The R package `dgpsi` provides R interface to Python package [`dgpsi`](https://github.com/mingdeyu/DGP) for deep and linked Gaussian process emulations using stochastic imputation (SI). 
@@ -28,6 +28,7 @@ The R package `dgpsi` provides R interface to Python package [`dgpsi`](https://g
 * Fast Leave-One-Out (LOO) and Out-Of-Sample (OOS) validations for GP, DGP, and linked (D)GP emulators.
 * Multi-core predictions and validations for GP, DGP, and Linked (D)GP emulators.
 * Sequential designs for (D)GP emulators and bundles of (D)GP emulators.
+* Automatic pruning of DGP emulators, both statically and dynamically.
 
 ## Getting started
 * Check [A Quick Guide to dgpsi](https://mingdeyu.github.io/dgpsi-R/articles/dgpsi.html) to get started with the package.
@@ -76,6 +77,9 @@ to load the package. To install or activate the required Python environment auto
 > ```r
 > dgpsi::init_py()
 > ```
+
+## Research Notice
+This package is part of an ongoing research initiative. For detailed information about the research aspects and guidelines for use, please refer to our [Research Notice](https://github.com/mingdeyu/dgpsi-R/blob/master/RESEARCH-NOTICE.md).
 
 ## References
 > [Ming, D. and Williamson, D. (2023) Linked deep Gaussian process emulation for model networks. arXiv:2306.01212](https://arxiv.org/abs/2306.01212)

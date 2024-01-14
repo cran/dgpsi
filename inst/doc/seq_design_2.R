@@ -30,7 +30,7 @@ knitr::opts_chunk$set(
 #  wrap_plots(list(p1, p2, p3)) + plot_annotation(title = 'Synthetic Simulator')
 
 ## -----------------------------------------------------------------------------
-#  set_seed(99)
+#  set_seed(999)
 
 ## -----------------------------------------------------------------------------
 #  X <- maximinLHS(5, 1)

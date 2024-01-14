@@ -1,5 +1,27 @@
+# dgpsi 2.4.0
+- One can now use `design()` to implement sequential designs using `f` and a fixed candidate set passed to `x_cand` with `y_cand = NULL`.
+- The sizes of `.pkl` files written by `write()` are significantly reduced.
+- One can now set different kernel functions to nodes in different layers in a DGP emulator by passing a vector of kernel function names to `name` argument of `dgp()`.
+- The default number of imputations `B` in `dgp()` and `lgp()` is changed to `10` for faster validations and predictions.
+- The default method for sequential designs in `design()` is changed to `vigf()`.
+- A new argument `new_wave` is added to `design()` to allow users to resume sequential designs with or without a separate wave. 
+- A bug in `vigf()` is fixed when `object` is an instance of the `bundle` class and `batch_size` is greater than one.
+- Static and dynamic pruning of DGP structures are implemented in `prune()` and `design()` (via the new arguments `pruning` and `control`) respectively.
+- Some redundant codes are removed from `update()` which makes `design()` slightly faster.
+- `limits` argument in `design()` is now required when `x_cand` is not supplied to avoid under-sampling using the limits inferred from the training data.
+- `design()` now supports `f` that produce `NA` as outputs. This is useful to prevent the sequential design from stopping due to errors or `NA` outputs from a simulator at some input locations identified by the sequential design process.
+- A bug is fixed in `design()` when `x_cand` is supplied and the input dimension is one.
+- `alm()`, `mice()`, `pei()`, and `vigf()` now accept separate candidate sets (even with different number of candidate points) via `x_cand` for bundle emulators.
+- A slot called `id` is added to instances of `gp`, `dgp`, `lgp`, and `bundle` classes to uniquely identify the emulators. `id` can also be passed to instances of `gp`, `dgp`,`lgp`, and `bundle` classes by the new `id` argument in `gp()`, `dgp()`, `lgp()`, and `pack()`.
+- `pack()` can now accept a list of (D)GP emulators as the input.
+- The `check_point` argument is removed from `design()` and replaced by `autosave`.
+- Automatic saving of emulators during the sequential design is added to `design()` through the new argument `autosave`.
+- When a customized evaluation function is provided to `design()` via `eval`, the design information in previous waves will be retained as long as the previous waves of the sequential design also use customized evaluation functions. If different customized evaluation functions are supplied to `design()` in different waves, the trace plot of RMSEs produced by `draw()` will show RMSEs from different evaluation functions in different waves.
+- One can now link the same emulator multiple times in a chain via `lgp()` by setting different linking information for the emulator via `set_linked_idx()`.
+- Updates of documentations and vignettes.
+
 # dgpsi 2.3.0
-- A bug from the underlying Python implementations is fixed when `name = matern2.5` in `gp()` and `dgp()`.
+- A bug from the underlying Python implementations is fixed when `name = 'matern2.5'` in `gp()` and `dgp()`.
 - Thanks to @yyimingucl, a bug from the underlying Python implementations for the MICE sequential design criterion `mice()` is fixed.
 - An argument `reset` is added to `update()` and `design()` to reset hyperparameters of a (D)GP emulator to their initial values (that were specified when the emulator is initialized) after the input and output of the emulator are updated and before the emulator is refitted. This argument can be useful for sequential designs in cases where the hyperparameters of a (D)GP emulator get caught in suboptimal estimates. In such circumstances, one can set `reset = TRUE` to reinitialize the (D)GP emulator in some steps of the sequential designs as a strategy to escape the poor estimates.
 - The refitting of an emulator in the final step of a sequential design is no longer forced in `design()`. 
