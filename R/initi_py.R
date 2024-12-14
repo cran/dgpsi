@@ -5,6 +5,9 @@ pkg.env$np <- NULL
 pkg.env$copy <- NULL
 pkg.env$py_gc <- NULL
 pkg.env$restart <- FALSE
+pkg.env$thread_num <- NULL
+pkg.env$base64 <- NULL
+pkg.env$dill <- NULL
 
 #' @title 'python' environment initialization
 #'
@@ -22,12 +25,12 @@ pkg.env$restart <- FALSE
 #' @param uninstall a bool that indicates whether to uninstall the 'python' version of 'dgpsi' specified
 #'    in `dgpsi_ver` if it has already been installed. This argument is useful when the 'python' environment
 #'    is corrupted and one wants to completely uninstall and reinstall it. Defaults to `FALSE`.
-#' @param verb a bool indicating if the trace information will be printed during the function execution.
+#' @param verb a bool indicating if trace information will be printed during function execution.
 #'     Defaults to `TRUE`.
 #'
 #' @return No return value, called to install required 'python' environment.
 #'
-#' @details See further examples and tutorials at <https://mingdeyu.github.io/dgpsi-R/>.
+#' @details See further examples and tutorials at <`r get_docs_url()`>.
 #' @examples
 #' \dontrun{
 #'
@@ -42,11 +45,11 @@ init_py <- function(py_ver = NULL, dgpsi_ver = NULL, reinstall = FALSE, uninstal
     ##For devel version
     #dgpsi_ver <- c('cython>=0.29.30', 'dill>=0.3.2, <=0.3.5.1', 'jupyter>=1.0.0', 'matplotlib-base>=3.2.1', 'numba >=0.51.2',
     #               'numpy >=1.18.2', 'pathos ==0.2.9', 'multiprocess ==0.70.13', 'psutil >=5.8.0', 'pybind11 >=2.10.0', 'pythran >=0.11.0',
-    #               'scikit-build >=0.15.0', 'scikit-learn >=0.22.0', 'scipy >=1.4.1', 'tqdm >=4.50.2', 'tabulate >=0.8.7')
-    #env_name <- 'dgp_si_R_2_3_0_9000'
+    #               'scikit-build >=0.15.0', 'scikit-learn >=0.22.0', 'scipy >=1.4.1', 'tqdm >=4.50.2', 'tabulate >=0.8.7', 'faiss-cpu >=1.7.4')
+    #env_name <- 'dgp_si_R_2_4_0_9000'
     ##For release version
-    dgpsi_ver <- 'dgpsi==2.4.0'
-    env_name <- 'dgp_si_R_2_4_0'
+    dgpsi_ver <- 'dgpsi==2.5.0'
+    env_name <- 'dgp_si_R_2_5_0'
   } else {
     env_name <- paste('dgp_si_R_', gsub(".", "_", dgpsi_ver,fixed=TRUE), sep = "")
     dgpsi_ver <- paste('dgpsi==', dgpsi_ver, sep = "")
@@ -134,6 +137,9 @@ init_py <- function(py_ver = NULL, dgpsi_ver = NULL, reinstall = FALSE, uninstal
     assign('np', reticulate::import("numpy"), pkg.env)
     assign('copy', reticulate::import("copy"), pkg.env)
     assign('py_gc', reticulate::import("gc"), pkg.env)
+    assign('dill', reticulate::import("dill"), pkg.env)
+    assign('base64', reticulate::import("base64"), pkg.env)
+    pkg.env$thread_num <- pkg.env$dgpsi$get_thread()
     if ( verb ) message(" done")
     Sys.sleep(0.5)
     if ( verb ) message("The Python environment for 'dgpsi' is successfully loaded.")
@@ -163,13 +169,77 @@ install_dgpsi <- function(env_name, py_ver, conda_path, dgpsi_ver, reinsatll = F
       reticulate::conda_install(envname = env_name, packages = c("git+https://github.com/mingdeyu/DGP.git") , conda = conda_path, pip = TRUE, pip_options = c('--no-deps'))
     }
   }
-  if (Sys.info()[["sysname"]] == 'Linux' & !any(grepl("libstdc++.so.6.0.3",list.files("/usr/lib/x86_64-linux-gnu/"), fixed = TRUE))){
-    libstdc_path <- paste(gsub("bin.*$", "", conda_path), 'envs/', env_name, '/lib/libstdc++.so.6.0.3*', sep='')
-    system(paste("sudo cp", libstdc_path, "/usr/lib/x86_64-linux-gnu/"))
-    libstdc_sys_path <- "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
-    system(paste("sudo rm",libstdc_sys_path))
-    system(paste("sudo ln -s", "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.3*", libstdc_sys_path))
+  #if (Sys.info()[["sysname"]] == 'Linux' & !any(grepl("libstdc++.so.6.0.3",list.files("/usr/lib/x86_64-linux-gnu/"), fixed = TRUE))){
+  #  cat("The required file 'libstdc++.so.6.0.30' or above is missing from /usr/lib/x86_64-linux-gnu/.")
+  #  ans <- readline(prompt="To proceed, would you like to grant sudo permissions to resolve the issue? (Y/N) ")
+  #  if ( tolower(ans)=='y'|tolower(ans)=='yes' ){
+  #    libstdc_path <- paste(gsub("bin.*$", "", conda_path), 'envs/', env_name, '/lib/libstdc++.so.6.0.3*', sep='')
+  #    system(paste("sudo cp", libstdc_path, "/usr/lib/x86_64-linux-gnu/"))
+  #    libstdc_sys_path <- "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+  #    system(paste("sudo rm",libstdc_sys_path))
+  #    system(paste("sudo ln -s", "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.3*", libstdc_sys_path))
+  #  } else {
+  #    stop("Please link /usr/lib/x86_64-linux-gnu/libstdc++.so.6 to 'libstdc++.so.6.0.30' or above and run init_py(reinstall = T).", call. = FALSE)
+  #  }
+  #}
+
+  if (Sys.info()[["sysname"]] == 'Linux') {
+    # Retrieve conda environment information
+    conda_env_path <- reticulate::conda_list(conda = conda_path)
+    conda_dgpsi_path <- conda_env_path$python[conda_env_path$name == env_name]
+    libstdc_path <- paste(gsub("bin.*$", "", conda_dgpsi_path), 'lib', sep = '')
+
+    # Construct the export command
+    export_command <- paste0("export LD_LIBRARY_PATH=", libstdc_path, ":$LD_LIBRARY_PATH")
+
+    # Detect the user's shell
+    shell <- Sys.getenv("SHELL")
+    if (grepl("bash", shell)) {
+      rc_file <- "~/.bashrc"
+    } else if (grepl("zsh", shell)) {
+      rc_file <- "~/.zshrc"
+    } else {
+      # Default to ~/.bashrc if the shell is unrecognized
+      rc_file <- "~/.bashrc"
+    }
+
+    # Inform the user
+    message("To use the package properly, we need to update your LD_LIBRARY_PATH.")
+    permission <- readline(prompt = "Can we automatically update this in your shell configuration file? (Y/N) ")
+
+    if (tolower(permission) == 'y' || tolower(permission) == 'yes') {
+      rc_file_path <- path.expand(rc_file)
+
+      # Check if the rc file exists, if not create it
+      if (!file.exists(rc_file_path)) {
+        #message(paste0(rc_file, " does not exist. Creating a new ", rc_file, " file."))
+        is.create <- file.create(rc_file_path)
+      } else {
+        # Read the content of the rc file
+        rc_content <- readLines(rc_file_path)
+
+        # Identify lines that match the existing LD_LIBRARY_PATH export command
+        matching_lines <- grepl("LD_LIBRARY_PATH=.*dgp_si_R", rc_content)
+
+        # Remove any existing export commands with the pattern "dgp_si_R"
+        rc_content_cleaned <- rc_content[!matching_lines]
+
+        # Write back the cleaned content (without the old export commands)
+        writeLines(rc_content_cleaned, rc_file_path)
+      }
+
+      # Append the new export command
+      cat(export_command, file = rc_file_path, append = TRUE, sep = "\n")
+
+      message(paste0("The path has been updated in your ", rc_file, "."))
+      message(paste0("You may need to restart your terminal or run 'source ", rc_file, "' to apply the updates."))
+    } else {
+      # Print the command for manual addition
+      message("Please manually add the following line to your ", rc_file, ":")
+      cat(export_command, "\n")
+    }
   }
+
   message("Installation finished. Please restart R.")
 }
 

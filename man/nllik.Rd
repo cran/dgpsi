@@ -2,17 +2,12 @@
 % Please edit documentation in R/utils.R
 \name{nllik}
 \alias{nllik}
-\title{Calculate negative predicted log-likelihood}
+\title{Calculate the predictive negative log-likelihood}
 \usage{
 nllik(object, x, y)
 }
 \arguments{
-\item{object}{an instance of the \code{dgp} class and it should be produced by \code{\link[=dgp]{dgp()}} with one of the following two settings:
-\enumerate{
-\item if \code{struc = NULL}, \code{likelihood} is not \code{NULL};
-\item if a customized structure is provided to \code{struc}, the final layer must be likelihood layer containing only one
-likelihood node produced by \code{\link[=Poisson]{Poisson()}}, \code{\link[=Hetero]{Hetero()}}, or \code{\link[=NegBin]{NegBin()}}.
-}}
+\item{object}{an instance of the \code{dgp} class and it should be produced by \code{\link[=dgp]{dgp()}} with \code{likelihood} not being \code{NULL};}
 
 \item{x}{a matrix where each row is an input testing data point and each column is an input dimension.}
 
@@ -25,21 +20,9 @@ across all testing data points. The second one, named \code{allNLL}, is a vector
 log-likelihood for each testing data point.
 }
 \description{
-This function computes the negative predicted log-likelihood from a
+This function computes the predictive negative log-likelihood from a
 DGP emulator with a likelihood layer.
 }
 \details{
 See further examples and tutorials at \url{https://mingdeyu.github.io/dgpsi-R/}.
-}
-\note{
-Any R vector detected in \code{x} and \code{y} will be treated as a column vector and automatically converted into a single-column
-R matrix. Thus, if \code{x} is a single testing data point with multiple dimensions, it must be given as a matrix.
-}
-\examples{
-\dontrun{
-
-# Check https://mingdeyu.github.io/dgpsi-R/ for examples
-# on how to compute the negative predicted log-likelihood
-# using nllik().
-}
 }

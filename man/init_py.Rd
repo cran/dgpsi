@@ -31,7 +31,7 @@ of 'dgpsi'. Defaults to \code{FALSE}.}
 in \code{dgpsi_ver} if it has already been installed. This argument is useful when the 'python' environment
 is corrupted and one wants to completely uninstall and reinstall it. Defaults to \code{FALSE}.}
 
-\item{verb}{a bool indicating if the trace information will be printed during the function execution.
+\item{verb}{a bool indicating if trace information will be printed during function execution.
 Defaults to \code{TRUE}.}
 }
 \value{

@@ -7,14 +7,27 @@
 \alias{validate.lgp}
 \title{Validate a constructed GP, DGP, or linked (D)GP emulator}
 \usage{
-validate(object, x_test, y_test, method, verb, force, cores, ...)
+validate(
+  object,
+  x_test,
+  y_test,
+  method,
+  sample_size,
+  verb,
+  M,
+  force,
+  cores,
+  ...
+)
 
 \method{validate}{gp}(
   object,
   x_test = NULL,
   y_test = NULL,
-  method = "mean_var",
+  method = NULL,
+  sample_size = 50,
   verb = TRUE,
+  M = 50,
   force = FALSE,
   cores = 1,
   ...
@@ -24,11 +37,12 @@ validate(object, x_test, y_test, method, verb, force, cores, ...)
   object,
   x_test = NULL,
   y_test = NULL,
-  method = "mean_var",
+  method = NULL,
+  sample_size = 50,
   verb = TRUE,
+  M = 50,
   force = FALSE,
   cores = 1,
-  threading = FALSE,
   ...
 )
 
@@ -36,11 +50,12 @@ validate(object, x_test, y_test, method, verb, force, cores, ...)
   object,
   x_test = NULL,
   y_test = NULL,
-  method = "mean_var",
+  method = NULL,
+  sample_size = 50,
   verb = TRUE,
+  M = 50,
   force = FALSE,
   cores = 1,
-  threading = FALSE,
   ...
 )
 }
@@ -52,10 +67,10 @@ validate(object, x_test, y_test, method, verb, force, cores, ...)
 \item the S3 class \code{lgp}.
 }}
 
-\item{x_test}{the OOS testing input data:
+\item{x_test}{OOS testing input data:
 \itemize{
-\item if \code{x} is an instance of the \code{gp} or \code{dgp} class, \code{x_test} is a matrix where each row is an input testing data point and each column is an input dimension.
-\item if \code{x} is an instance of the \code{lgp} class, \code{x_test} can be a matrix or a list:
+\item if \code{object} is an instance of the \code{gp} or \code{dgp} class, \code{x_test} is a matrix where each row is a new input location to be used for validating the emulator and each column is an input dimension.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}} if \code{object} is an instance of the \code{lgp} class, \code{x_test} can be a matrix or a list:
 \itemize{
 \item if \code{x_test} is a matrix, it is the global testing input data that feed into the emulators in the first layer of a system.
 The rows of \code{x_test} represent different input data points and the columns represent input dimensions across all emulators in
@@ -69,44 +84,52 @@ global testing input data to the emulators in the corresponding layer. The matri
 their corresponding emulators are placed in \code{struc} argument of \code{\link[=lgp]{lgp()}}. If there is no global input data to a certain emulator,
 set \code{NULL} in the corresponding sub-list of \code{x_test}.
 }
+
+\strong{This option for linked (D)GP emulators is deprecated and will be removed in the next release.}
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} If \code{object} is an instance of the \code{lgp} class created by \code{\link[=lgp]{lgp()}} with argument \code{struc} in data frame form,
+\code{x_test} must be a matrix representing the global input, where each row corresponds to a test data point and each column represents a global input dimension.
+The column indices in \code{x_test} must align with the indices specified in the \code{From_Output} column of the \code{struc} data frame (used in \code{\link[=lgp]{lgp()}}),
+corresponding to rows where the \code{From_Emulator} column is \code{"Global"}.
 }
 
-\code{x_test} must be provided for the validation if \code{x} is an instance of the \code{lgp}. Defaults to \code{NULL}.}
+\code{x_test} must be provided if \code{object} is an instance of the \code{lgp}. \code{x_test} must also be provided if \code{y_test} is provided. Defaults to \code{NULL}, in which case LOO validation is performed.}
 
-\item{y_test}{the OOS testing output data that correspond to \code{x_test}:
+\item{y_test}{the OOS output data corresponding to \code{x_test}:
 \itemize{
-\item if \code{x} is an instance of the \code{gp} class, \code{y_test} is a matrix with only one column and each row being an testing output data point.
-\item if \code{x} is an instance of the \code{dgp} class, \code{y_test} is a matrix with its rows being testing output data points and columns being
-output dimensions.
-\item if \code{x} is an instance of the \code{lgp} class, \code{y_test} can be a single matrix or a list of matrices:
+\item if \code{object} is an instance of the \code{gp} class, \code{y_test} is a matrix with only one column where each row represents the output corresponding to the matching row of \code{x_test}.
+\item if \code{object} is an instance of the \code{dgp} class, \code{y_test} is a matrix where each row represents the output corresponding to the matching row of \code{x_test} and with columns representing output dimensions.
+\item if \code{object} is an instance of the \code{lgp} class, \code{y_test} can be a single matrix or a list of matrices:
 \itemize{
-\item if \code{y_test} is a single matrix, then there is only one emulator in the final layer of the linked emulator system and \code{y_test}
+\item if \code{y_test} is a single matrix, then there should be only one emulator in the final layer of the linked emulator system and \code{y_test}
 represents the emulator's output with rows being testing positions and columns being output dimensions.
-\item if \code{y_test} is a list, then \code{y_test} should have \emph{M} number (the same number of emulators in the final layer of the system) of matrices.
+\item if \code{y_test} is a list, then \code{y_test} should have \emph{L} matrices, where \emph{L} is the number of emulators in the final layer of the system.
 Each matrix has its rows corresponding to testing positions and columns corresponding to output dimensions of the associated emulator
 in the final layer.
 }
 }
 
-\code{y_test} must be provided for the validation if \code{x} is an instance of the \code{lgp}. Defaults to \code{NULL}.}
+\code{y_test} must be provided if \code{object} is an instance of the \code{lgp}. \code{y_test} must also be provided if \code{x_test} is provided. Defaults to \code{NULL}, in which case LOO validation is performed.}
 
-\item{method}{the prediction approach in validations: mean-variance (\code{"mean_var"}) or sampling (\code{"sampling"}) approach. Defaults to \code{"mean_var"}.}
+\item{method}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#updated}{\figure{lifecycle-updated.svg}{options: alt='[Updated]'}}}{\strong{[Updated]}} the prediction approach to use for validation: either the mean-variance approach (\code{"mean_var"}) or the sampling approach (\code{"sampling"}). For details see \code{\link[=predict]{predict()}}.
+For DGP emulators with a categorical likelihood (\code{likelihood = "Categorical"} in \code{\link[=dgp]{dgp()}}), only the sampling approach is supported.
+By default, the method is set to \code{"sampling"} for DGP emulators with Poisson, Negative Binomial, and Categorical likelihoods and \code{"mean_var"} otherwise.}
 
-\item{verb}{a bool indicating if the trace information on validations will be printed during the function execution.
+\item{sample_size}{the number of samples to draw for each given imputation if \code{method = "sampling"}. Defaults to \code{50}.}
+
+\item{verb}{a bool indicating if trace information for validation should be printed during function execution.
 Defaults to \code{TRUE}.}
 
-\item{force}{a bool indicating whether to force the LOO or OOS re-evaluation when \code{loo} or \code{oos} slot already exists in \code{object}. When \code{force = FALSE},
-\code{\link[=validate]{validate()}} will try to determine automatically if the LOO or OOS re-evaluation is needed. Set \code{force} to \code{TRUE} when LOO or OOS re-evaluation
+\item{M}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} the size of the conditioning set for the Vecchia approximation in emulator validation. This argument is only used if the emulator \code{object}
+was constructed under the Vecchia approximation. Defaults to \code{50}.}
+
+\item{force}{a bool indicating whether to force LOO or OOS re-evaluation when the \code{loo} or \code{oos} slot already exists in \code{object}. When \code{force = FALSE},
+\code{\link[=validate]{validate()}} will only re-evaluate the emulators if the \code{x_test} and \code{y_test} are not identical to the values in the \code{oos} slot. If the existing \code{loo} or \code{oos} validation used a different \code{M} in a Vecchia approximation or a different \code{method} to the one prescribed in this call, the emulator will be re-evaluated. Set \code{force} to \code{TRUE} when LOO or OOS re-evaluation
 is required. Defaults to \code{FALSE}.}
 
-\item{cores}{the number of cores/workers to be used for the LOO or OOS validation. If set to \code{NULL},
-the number of cores is set to \verb{(max physical cores available - 1)}. Defaults to \code{1}.}
+\item{cores}{the number of processes to be used for validation. If set to \code{NULL}, the number of processes is set to \verb{max physical cores available \%/\% 2}.
+Defaults to \code{1}.}
 
 \item{...}{N/A.}
-
-\item{threading}{a bool indicating whether to use the multi-threading to accelerate the LOO or OOS.
-Turning this option on could improve the speed of validations when the emulator is built with a moderately large number of
-training data points and the Matérn-2.5 kernel.}
 }
 \value{
 \itemize{
@@ -120,8 +143,10 @@ GP emulator at validation positions.
 GP emulator at validation positions. If \code{method = "mean_var"}, the upper and lower bounds of a credible interval are two standard deviations above
 and below the predictive mean. If \code{method = "sampling"}, the upper and lower bounds of a credible interval are 2.5th and 97.5th percentiles.
 \item a numeric value called \code{rmse} that contains the root mean/median squared error of the GP emulator.
-\item a numeric value called \code{nrmse} that contains the (min-max) normalized root mean/median squared error of the GP emulator. The min-max normalization
-is based on the maximum and minimum values of the validation outputs contained in \code{y_train} (or \code{y_test}).
+\item a numeric value called \code{nrmse} that contains the (max-min) normalized root mean/median squared error of the GP emulator. The max-min normalization
+uses the maximum and minimum values of the validation outputs contained in \code{y_train} (or \code{y_test}).
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} an integer called \code{M} that contains the size of the conditioning set used for the Vecchia approximation, if used, for emulator validation.
+\item an integer called \code{sample_size} that contains the number of samples used for validation if \code{method = "sampling"}.
 }
 
 The rows of matrices (\code{mean}, \code{median}, \code{std}, \code{lower}, and \code{upper}) correspond to the validation positions.
@@ -136,12 +161,28 @@ DGP emulator at validation positions. If \code{method = "mean_var"}, the upper a
 and below the predictive mean. If \code{method = "sampling"}, the upper and lower bounds of a credible interval are 2.5th and 97.5th percentiles.
 \item a vector called \code{rmse} that contains the root mean/median squared errors of the DGP emulator across different output
 dimensions.
-\item a vector called \code{nrmse} that contains the (min-max) normalized root mean/median squared errors of the DGP emulator across different output
-dimensions. The min-max normalization is based on the maximum and minimum values of the validation outputs contained in \code{y_train} (or \code{y_test}).
+\item a vector called \code{nrmse} that contains the (max-min) normalized root mean/median squared errors of the DGP emulator across different output
+dimensions. The max-min normalization uses the maximum and minimum values of the validation outputs contained in \code{y_train} (or \code{y_test}).
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} an integer called \code{M} that contains size of the conditioning set used for the Vecchia approximation, if used, for emulator validation.
+\item an integer called \code{sample_size} that contains the number of samples used for validation if \code{method = "sampling"}.
 }
 
 The rows and columns of matrices (\code{mean}, \code{median}, \code{std}, \code{lower}, and \code{upper}) correspond to the validation positions and DGP emulator output
 dimensions, respectively.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} If \code{object} is an instance of the \code{dgp} class with a categorical likelihood, an updated \code{object} is returned with an additional slot called \code{loo}
+(for LOO cross validation) or \code{oos} (for OOS validation) that contains:
+\itemize{
+\item two slots called \code{x_train} (or \code{x_test}) and \code{y_train} (or \code{y_test}) that contain the validation data points for LOO (or OOS).
+\item a matrix called \code{label} that contains predictive samples of labels from the DGP emulator at validation positions. The matrix has its rows
+corresponding to validation positions and columns corresponding to samples of labels.
+\item a list called \code{probability} that contains predictive samples of probabilities for each class from the DGP emulator at validation positions. The element in the list
+is a matrix that has its rows corresponding to validation positions and columns corresponding to samples of probabilities.
+\item a scalar called \code{log_loss} that represents the average log loss of the predicted labels in the DGP emulator across all validation positions. Log loss measures the
+accuracy of probabilistic predictions, with lower values indicating better classification performance. \code{log_loss} ranges from \code{0} to positive infinity, where a
+value closer to \code{0} suggests more confident and accurate predictions.
+\item an integer called \code{M} that contains size of the conditioning set used for the Vecchia approximation, if used, in emulator validation.
+\item an integer called \code{sample_size} that contains the number of samples used for validation.
+}
 \item If \code{object} is an instance of the \code{lgp} class, an updated \code{object} is returned with an additional slot called \code{oos} (for OOS validation) that contains:
 \itemize{
 \item two slots called \code{x_test} and \code{y_test} that contain the validation data points for OOS.
@@ -151,8 +192,10 @@ the linked (D)GP emulator at validation positions.
 the linked (D)GP emulator at validation positions. If \code{method = "mean_var"}, the upper and lower bounds of a credible interval are two standard
 deviations above and below the predictive mean. If \code{method = "sampling"}, the upper and lower bounds of a credible interval are 2.5th and 97.5th percentiles.
 \item a list called \code{rmse} that contains the root mean/median squared errors of the linked (D)GP emulator.
-\item a list called \code{nrmse} that contains the (min-max) normalized root mean/median squared errors of the linked (D)GP emulator. The min-max normalization
-is based on the maximum and minimum values of the validation outputs contained in \code{y_test}.
+\item a list called \code{nrmse} that contains the (max-min) normalized root mean/median squared errors of the linked (D)GP emulator. The max-min normalization
+uses the maximum and minimum values of the validation outputs contained in \code{y_test}.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} an integer called \code{M} that contains size of the conditioning set used for the Vecchia approximation, if used, in emulator validation.
+\item an integer called \code{sample_size} that contains the number of samples used for validation if \code{method = "sampling"}.
 }
 
 Each element in \code{mean}, \code{median}, \code{std}, \code{lower}, \code{upper}, \code{rmse}, and \code{nrmse} corresponds to a (D)GP emulator in the final layer of the linked (D)GP
@@ -160,20 +203,17 @@ emulator.
 }
 }
 \description{
-This function validate a constructed GP, DGP, or linked (D)GP emulator via the Leave-One-Out (LOO)
-cross validation or Out-Of-Sample (OOS) validation.
+This function calculates Leave-One-Out (LOO) cross validation or Out-Of-Sample (OOS) validation statistics for a constructed GP, DGP, or linked (D)GP emulator.
 }
 \details{
 See further examples and tutorials at \url{https://mingdeyu.github.io/dgpsi-R/}.
 }
 \note{
 \itemize{
-\item When both \code{x_test} and \code{y_test} are \code{NULL}, the LOO cross validation will be implemented. Otherwise, OOS validation will
-be implemented. The LOO validation is only applicable to a GP or DGP emulator (i.e., \code{x} is an instance of the \code{gp} or \code{dgp}
-class). If a linked (D)GP emulator (i.e., \code{x} is an instance of the \code{lgp} class) is provided, \code{x_test} and \code{y_test} must
+\item When both \code{x_test} and \code{y_test} are \code{NULL}, LOO cross validation will be implemented. Otherwise, OOS validation will
+be implemented. LOO validation is only applicable to a GP or DGP emulator (i.e., \code{object} is an instance of the \code{gp} or \code{dgp}
+class). If a linked (D)GP emulator (i.e., \code{object} is an instance of the \code{lgp} class) is provided, \code{x_test} and \code{y_test} must
 also be provided for OOS validation.
-\item Any R vector detected in \code{x_test} and \code{y_test} will be treated as a column vector and automatically converted into a single-column
-R matrix. Thus, if \code{x_test} or \code{y_test} is a single testing data point with multiple dimensions, it must be given as a matrix.
 }
 }
 \examples{

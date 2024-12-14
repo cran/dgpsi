@@ -7,11 +7,11 @@
 \alias{summary.lgp}
 \title{Summary of a constructed GP, DGP, or linked (D)GP emulator}
 \usage{
-\method{summary}{gp}(object, ...)
+\method{summary}{gp}(object, type = "plot", ...)
 
-\method{summary}{dgp}(object, ...)
+\method{summary}{dgp}(object, type = "plot", ...)
 
-\method{summary}{lgp}(object, ...)
+\method{summary}{lgp}(object, type = "plot", group_size = 1, ...)
 }
 \arguments{
 \item{object}{can be one of the following:
@@ -21,13 +21,29 @@
 \item the S3 class \code{lgp}.
 }}
 
-\item{...}{N/A.}
+\item{type}{a character string, either \code{"table"} or \code{"plot"}, indicating the format of the output.
+If set to \code{"table"}, the function returns a summary in table. If set to \code{"plot"}, the function
+returns an interactive visualization. Defaults to \code{"plot"}. If the \code{object} was created with
+\code{\link[=lgp]{lgp()}} where \code{struc} is not a data frame, \code{type} will automatically default to \code{"table"}.}
+
+\item{...}{Any arguments that can be passed to \code{\link[kableExtra:kbl]{kableExtra::kbl()}} when \code{type = "table"}.}
+
+\item{group_size}{an integer specifying the number of consecutive layers to be grouped together
+in the interactive visualization of linked emulators when \code{type = "plot"}.
+This argument is only applicable if \code{object} is an instance of the \code{lgp} class.
+Defaults to \code{1}.}
 }
 \value{
-A table summarizing key information contained in \code{object}.
+Either a summary table (returned as \code{kableExtra} object) or an interactive visualization
+(returned as a \code{visNetwork} object) of the emulator. The visualization is compatible with R Markdown
+documents and the RStudio Viewer. The summary table can be further customized by \link[kableExtra:kableExtra-package]{kableExtra::kableExtra} package.
+The resulting \code{visNetwork} object can be saved as an HTML file using \code{\link[visNetwork:visSave]{visNetwork::visSave()}} from the \link[visNetwork:visNetwork]{visNetwork::visNetwork} package.
 }
 \description{
-This function summarizes key information of a GP, DGP or linked (D)GP emulator.
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#updated}{\figure{lifecycle-updated.svg}{options: alt='[Updated]'}}}{\strong{[Updated]}}
+
+This function provides a summary of key information for a GP, DGP, or linked (D)GP emulator
+by generating either a table or an interactive plot of the emulator’s structure.
 }
 \details{
 See further examples and tutorials at \url{https://mingdeyu.github.io/dgpsi-R/}.

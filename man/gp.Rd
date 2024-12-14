@@ -7,7 +7,6 @@
 gp(
   X,
   Y,
-  struc = NULL,
   name = "sexp",
   lengthscale = rep(0.1, ncol(X)),
   bounds = NULL,
@@ -18,6 +17,9 @@ gp(
   scale = 1,
   training = TRUE,
   verb = TRUE,
+  vecchia = FALSE,
+  M = 25,
+  ord = NULL,
   internal_input_idx = NULL,
   linked_idx = NULL,
   id = NULL
@@ -28,27 +30,23 @@ gp(
 
 \item{Y}{a matrix with only one column and each row being an output data point.}
 
-\item{struc}{an object produced by \code{\link[=kernel]{kernel()}} that gives a user-defined GP specifications. When \code{struc = NULL},
-the GP specifications are automatically generated using information provided in \code{name}, \code{lengthscale},
-\code{nugget_est}, \code{nugget}, \code{scale_est}, \code{scale},and \code{internal_input_idx}. Defaults to \code{NULL}.}
-
 \item{name}{kernel function to be used. Either \code{"sexp"} for squared exponential kernel or
-\code{"matern2.5"} for Matérn-2.5 kernel. Defaults to \code{"sexp"}. This argument is only used when \code{struc = NULL}.}
+\code{"matern2.5"} for Matérn-2.5 kernel. Defaults to \code{"sexp"}.}
 
-\item{lengthscale}{initial values of lengthscales in the kernel function. It can be a single numeric value or a vector:
+\item{lengthscale}{initial values of lengthscales in the kernel function. It can be a single numeric value or a vector of length \code{ncol(X)}:
 \itemize{
 \item if it is a single numeric value, it is assumed that kernel functions across input dimensions share the same lengthscale;
-\item if it is a vector (which must have a length of \code{ncol(X)}), it is assumed that kernel functions across input dimensions have different lengthscales.
+\item if it is a vector, it is assumed that kernel functions across input dimensions have different lengthscales.
 }
 
-Defaults to a vector of \code{0.1}. This argument is only used when \code{struc = NULL}.}
+Defaults to a vector of \code{0.1}.}
 
 \item{bounds}{the lower and upper bounds of lengthscales in the kernel function. It is a vector of length two where the first element is
 the lower bound and the second element is the upper bound. The bounds will be applied to all lengthscales in the kernel function. Defaults
-to \code{NULL} where no bounds are specified for the lengthscales. This argument is only used when \code{struc = NULL}.}
+to \code{NULL} where no bounds are specified for the lengthscales.}
 
 \item{prior}{prior to be used for Maximum a Posterior for lengthscales and nugget of the GP: gamma prior (\code{"ga"}), inverse gamma prior (\code{"inv_ga"}),
-or jointly robust prior (\code{"ref"}). Defaults to \code{"ref"}. This argument is only used when \code{struc = NULL}. See the reference below for the jointly
+or jointly robust prior (\code{"ref"}). Defaults to \code{"ref"}. See the reference below for the jointly
 robust prior.}
 
 \item{nugget_est}{a bool indicating if the nugget term is to be estimated:
@@ -57,13 +55,13 @@ robust prior.}
 \item \code{TRUE}: the nugget term will be estimated.
 }
 
-Defaults to \code{FALSE}. This argument is only used when \code{struc = NULL}.}
+Defaults to \code{FALSE}.}
 
 \item{nugget}{the initial nugget value. If \code{nugget_est = FALSE}, the assigned value is fixed during the training.
-Set \code{nugget} to a small value (e.g., \code{1e-8}) and the corresponding bool in \code{nugget_est} to \code{FASLE} for deterministic emulations where the emulator
-interpolates the training data points. Set \code{nugget} to a reasonable larger value and the corresponding bool in \code{nugget_est} to \code{TRUE} for stochastic
-emulations where the computer model outputs are assumed to follow a homogeneous Gaussian distribution. Defaults to \code{1e-8} if \code{nugget_est = FALSE} and
-\code{0.01} if \code{nugget_est = TRUE}. This argument is only used when \code{struc = NULL}.}
+Set \code{nugget} to a small value (e.g., \code{1e-8}) and the corresponding bool in \code{nugget_est} to \code{FALSE} for deterministic computer models where the emulator
+should interpolate the training data points. Set \code{nugget} to a larger value and the corresponding bool in \code{nugget_est} to \code{TRUE} for stochastic
+emulation where the computer model outputs are assumed to follow a homogeneous Gaussian distribution. Defaults to \code{1e-8} if \code{nugget_est = FALSE} and
+\code{0.01} if \code{nugget_est = TRUE}.}
 
 \item{scale_est}{a bool indicating if the variance is to be estimated:
 \enumerate{
@@ -71,23 +69,37 @@ emulations where the computer model outputs are assumed to follow a homogeneous 
 \item \code{TRUE}: the variance term will be estimated.
 }
 
-Defaults to \code{TRUE}. This argument is only used when \code{struc = NULL}.}
-
-\item{scale}{the initial variance value. If \code{scale_est = FALSE}, the assigned value is fixed during the training.
-Defaults to \code{1}. This argument is only used when \code{struc = NULL}.}
-
-\item{training}{a bool indicating if the initialized GP emulator will be trained.
-When set to \code{FALSE}, \code{\link[=gp]{gp()}} returns an untrained GP emulator, to which one can apply \code{\link[=summary]{summary()}} to inspect its specifications
-(especially when a customized \code{struc} is provided) or apply \code{\link[=predict]{predict()}} to check its emulation performance before the training. Defaults to \code{TRUE}.}
-
-\item{verb}{a bool indicating if the trace information on GP emulator construction and training will be printed during the function execution.
 Defaults to \code{TRUE}.}
 
-\item{internal_input_idx}{the column indices of \code{X} that are generated by the linked emulators in the preceding layers.
-Set \code{internal_input_idx = NULL} if the GP emulator is in the first layer of a system or all columns in \code{X} are
-generated by the linked emulators in the preceding layers. Defaults to \code{NULL}. This argument is only used when \code{struc = NULL}.}
+\item{scale}{the initial variance value. If \code{scale_est = FALSE}, the assigned value is fixed during the training.
+Defaults to \code{1}.}
 
-\item{linked_idx}{either a vector or a list of vectors:
+\item{training}{a bool indicating if the initialized GP emulator will be trained.
+When set to \code{FALSE}, \code{\link[=gp]{gp()}} returns an untrained GP emulator, to which one can apply \code{\link[=summary]{summary()}} to inspect its specification or apply \code{\link[=predict]{predict()}} to check its emulation performance before the training. Defaults to \code{TRUE}.}
+
+\item{verb}{a bool indicating if the trace information on GP emulator construction and training will be printed during function execution.
+Defaults to \code{TRUE}.}
+
+\item{vecchia}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} a bool indicating whether to use Vecchia approximation for large-scale GP emulator construction and prediction. Defaults to \code{FALSE}.
+The Vecchia approximation implemented for the GP emulation largely follows Katzfuss et al. (2022). See reference below.}
+
+\item{M}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} the size of the conditioning set for the Vecchia approximation in the GP emulator training. Defaults to \code{25}.}
+
+\item{ord}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} an R function that returns the ordering of the input to the GP emulator for the Vecchia approximation. The function must satisfy the following basic rules:
+\itemize{
+\item the first argument represents the input scaled by the lengthscales.
+\item the output of the function is a vector of indices that gives the ordering of the input to the GP emulator.
+}
+
+If \code{ord = NULL}, the default random ordering is used. Defaults to \code{NULL}.}
+
+\item{internal_input_idx}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}} The column indices of \code{X} that are generated by the linked emulators in the preceding layers.
+Set \code{internal_input_idx = NULL} if the GP emulator is in the first layer of a system or all columns in \code{X} are
+generated by the linked emulators in the preceding layers. Defaults to \code{NULL}.
+
+\strong{The argument will be removed in the next release. To set up connections of emulators for linked emulations, please use the updated \code{\link[=lgp]{lgp()}} function instead.}}
+
+\item{linked_idx}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}} Either a vector or a list of vectors:
 \itemize{
 \item If \code{linked_idx} is a vector, it gives indices of columns in the pooled output matrix (formed by column-combined outputs of all
 emulators in the feeding layer) that feed into the GP emulator. The length of the vector shall equal to the length of \code{internal_input_idx} when \code{internal_input_idx}
@@ -105,7 +117,9 @@ In addition, the first and second columns of \code{X[,internal_input_idx]} shoul
 }
 
 Set \code{linked_idx = NULL} if the GP emulator will not be used for linked emulations. However, if this is no longer the case, one can use \code{\link[=set_linked_idx]{set_linked_idx()}}
-to add linking information to the GP emulator. Defaults to \code{NULL}.}
+to add linking information to the GP emulator. Defaults to \code{NULL}.
+
+\strong{The argument will be removed in the next release. To set up connections of emulators for linked emulations, please use the updated \code{\link[=lgp]{lgp()}} function instead.}}
 
 \item{id}{an ID to be assigned to the GP emulator. If an ID is not provided (i.e., \code{id = NULL}), a UUID (Universally Unique Identifier) will be automatically generated
 and assigned to the emulator. Default to \code{NULL}.}
@@ -121,12 +135,15 @@ An S3 class named \code{gp} that contains five slots:
 \item \code{lengthscales}: a vector of lengthscales in the kernel function.
 \item \code{scale}: the variance value in the kernel function.
 \item \code{nugget}: the nugget value in the kernel function.
-\item \code{internal_dims}: the column indices of \code{X} that correspond to the linked emulators in the preceding layers of a linked system.
-\item \code{external_dims}: the column indices of \code{X} that correspond to global inputs to the linked system of emulators. It is shown as \code{FALSE} if \code{internal_input_idx = NULL}.
-\item \code{linked_idx}: the value passed to argument \code{linked_idx}. It is shown as \code{FALSE} if the argument \code{linked_idx} is \code{NULL}.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}} \code{internal_dims}: the column indices of \code{X} that correspond to the linked emulators in the preceding layers of a linked system.
+\strong{The slot will be removed in the next release}.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}} \code{external_dims}: the column indices of \code{X} that correspond to global inputs to the linked system of emulators.
+It is shown as \code{FALSE} if \code{internal_input_idx = NULL}. \strong{The slot will be removed in the next release}.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}} \code{linked_idx}: the value passed to argument \code{linked_idx}. It is shown as \code{FALSE} if the argument \code{linked_idx} is \code{NULL}.
+\strong{The slot will be removed in the next release}.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} \code{vecchia}: whether the Vecchia approximation is used for the GP emulator training.
+\item \ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#new}{\figure{lifecycle-new.svg}{options: alt='[New]'}}}{\strong{[New]}} \code{M}: the size of the conditioning set for the Vecchia approximation in the GP emulator training.
 }
-
-\code{internal_dims} and \code{external_dims} are generated only when \code{struc = NULL}.
 \item \code{constructor_obj}: a 'python' object that stores the information of the constructed GP emulator.
 \item \code{container_obj}: a 'python' object that stores the information for the linked emulation.
 \item \code{emulator_obj}: a 'python' object that stores the information for the predictions from the GP emulator.
@@ -140,10 +157,9 @@ The returned \code{gp} object can be used by
 \item \code{\link[=lgp]{lgp()}} for linked (D)GP emulator constructions.
 \item \code{\link[=summary]{summary()}} to summarize the trained GP emulator.
 \item \code{\link[=write]{write()}} to save the GP emulator to a \code{.pkl} file.
-\item \code{\link[=set_linked_idx]{set_linked_idx()}} to add the linking information to the GP emulator for linked emulations.
 \item \code{\link[=design]{design()}} for sequential designs.
 \item \code{\link[=update]{update()}} to update the GP emulator with new inputs and outputs.
-\item \code{\link[=alm]{alm()}}, \code{\link[=mice]{mice()}}, \code{\link[=pei]{pei()}}, and \code{\link[=vigf]{vigf()}} to locate next design points.
+\item \code{\link[=alm]{alm()}}, \code{\link[=mice]{mice()}}, and \code{\link[=vigf]{vigf()}} to locate next design points.
 }
 }
 \description{
@@ -197,5 +213,8 @@ m <- read('step_gp')
 
 }
 \references{
-Gu, M. (2019). Jointly robust prior for Gaussian stochastic process in emulation, calibration and variable selection. \emph{Bayesian Analysis}, \strong{14(3)}, 857-885.
+\itemize{
+\item Gu, M. (2019). Jointly robust prior for Gaussian stochastic process in emulation, calibration and variable selection. \emph{Bayesian Analysis}, \strong{14(3)}, 857-885.
+\item Katzfuss, M., Guinness, J., & Lawrence, E. (2022). Scaled Vecchia approximation for fast computer-model emulation. \emph{SIAM/ASA Journal on Uncertainty Quantification}, \strong{10(2)}, 537-554.
+}
 }

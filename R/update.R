@@ -5,22 +5,24 @@
 #' @param object can be one of the following:
 #' * the S3 class `gp`.
 #' * the S3 class `dgp`.
-#' @param X the new input data which is a matrix where each row is an input training data point and each column is an input dimension.
+#' @param X the new input data which is a matrix where each row is an input training data point and each column represents an input dimension.
 #' @param Y the new output data:
 #' * If `object` is an instance of the `gp` class, `Y` is a matrix with only one column and each row being an output data point.
 #' * If `object` is an instance of the `dgp` class, `Y` is a matrix with its rows being output data points and columns being
 #'     output dimensions. When `likelihood` (see below) is not `NULL`, `Y` must be a matrix with only one column.
-#' @param refit a bool indicating whether to re-fit the emulator `object` after the training input and output are updated. Defaults to `FALSE`.
-#' @param reset a bool indicating whether to reset hyperparameters of the emulator `object` to their initial values when the emulator was
-#'     constructed, after the training input and output are updated. Defaults to `FALSE`.
-#' @param verb a bool indicating if the trace information will be printed during the function execution.
+#' @param refit a bool indicating whether to re-fit the emulator `object` after the training input and output are updated. Defaults to `TRUE`.
+#' @param reset a bool indicating whether to reset hyperparameters of the emulator `object` to the initial values first obtained when the emulator was
+#'     constructed. Use if it is suspected that a local mode for the hyperparameters has been reached through successive updates. Defaults to `FALSE`.
+#' @param verb a bool indicating if trace information will be printed during the function execution.
 #'     Defaults to `TRUE`.
-#' @param N number of training iterations used to re-fit the emulator `object` if it is an instance of the `dgp` class. Defaults to `100`.
-#' @param cores the number of cores/workers to be used to re-fit GP components (in the same layer)
-#'     at each M-step during the re-fitting. If set to `NULL`, the number of cores is set to `(max physical cores available - 1)`.
-#'     Only use multiple cores when there is a large number of GP components in different layers and optimization of GP components
-#'     is computationally expensive. Defaults to `1`.
-#' @param ess_burn number of burnin steps for the ESS-within-Gibbs at each I-step in training the emulator `object` if it is an
+#' @param N `r new_badge("updated")` number of training iterations used to re-fit the emulator `object` if it is an instance of the `dgp` class. If set to `NULL`,
+#'     the number of iterations is set to `100` if the DGP emulator was constructed without the Vecchia approximation, and is set to `50`
+#'     if Vecchia approximation was used. Defaults to `NULL`.
+#' @param cores the number of processes to be used to re-fit GP components (in the same layer)
+#'     at each M-step during the re-fitting. If set to `NULL`, the number of processes is set to `(max physical cores available - 1)` if `vecchia = FALSE`
+#'     and `max physical cores available %/% 2` if `vecchia = TRUE`. Only use multiple processes when there is a large number of GP components in different
+#'     layers and optimization of GP components is computationally expensive. Defaults to `1`.
+#' @param ess_burn number of burnin steps for the ESS-within-Gibbs sampler at each I-step of the training of the emulator `object` if it is an
 #'     instance of the `dgp` class. Defaults to `10`.
 #' @param B the number of imputations for predictions from the updated emulator `object` if it is an instance of the `dgp` class.
 #'     This overrides the number of imputations set in `object`. Set to `NULL` to use the same number of imputations set
@@ -36,13 +38,11 @@
 #'   - `design` created by [design()]
 #'
 #'   in `object` will be removed and not contained in the returned object.
-#' * Any R vector detected in `X` and `Y` will be treated as a column vector and automatically converted into a single-column
-#'   R matrix. Thus, if `X` is a single data point with multiple dimensions, it must be given as a matrix.
-#' @details See further examples and tutorials at <https://mingdeyu.github.io/dgpsi-R/>.
+#' @details See further examples and tutorials at <`r get_docs_url()`>.
 #' @examples
 #' \dontrun{
 #'
-#' # See alm(), mice(), pei(), or vigf() for an example.
+#' # See alm(), mice(), or vigf() for an example.
 #' }
 #' @md
 #' @name update
@@ -54,7 +54,7 @@ update <- function(object, X, Y, refit, reset, verb, ...){
 #' @rdname update
 #' @method update dgp
 #' @export
-update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, N = 100, cores = 1, ess_burn = 10, B = NULL, ...) {
+update.dgp <- function(object, X, Y, refit = TRUE, reset = FALSE, verb = TRUE, N = NULL, cores = 1, ess_burn = 10, B = NULL, ...) {
   if ( is.null(pkg.env$dgpsi) ) {
     init_py(verb = F)
     if (pkg.env$restart) return(invisible(NULL))
@@ -63,10 +63,17 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
   if ( !inherits(object,"dgp") ){
     stop("'object' must be an instance of the 'dgp' class.", call. = FALSE)
   }
+  if( is.null(N) ) {
+    if (object[['specs']][['vecchia']]) {
+      N <- 50
+    } else {
+      N <- 100
+    }
+  }
   N <- as.integer(N)
   if( !is.null(cores) ) {
     cores <- as.integer(cores)
-    if ( cores < 1 ) stop("The core number must be >= 1.", call. = FALSE)
+    if ( cores < 1 ) stop("'cores' must be >= 1.", call. = FALSE)
   }
   ess_burn <- as.integer(ess_burn)
   if ( is.null(B) ){
@@ -77,11 +84,24 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
 
   if ( !is.matrix(X)&!is.vector(X) ) stop("'X' must be a vector or a matrix.", call. = FALSE)
   if ( !is.matrix(Y)&!is.vector(Y) ) stop("'Y' must be a vector or a matrix.", call. = FALSE)
-  if ( is.vector(X) ) X <- as.matrix(X)
-  if ( is.vector(Y) ) Y <- as.matrix(Y)
+
+  if ( is.vector(X) ) {
+    if ( ncol(object$data$X)!=1 ){
+      X <- matrix(X, nrow = 1)
+    } else {
+      X <- as.matrix(X)
+    }
+  }
+  if ( is.vector(Y) ) {
+    if ( ncol(object$data$Y)!=1 ){
+      Y <- matrix(Y, nrow = 1)
+    } else {
+      Y <- as.matrix(Y)
+    }
+  }
 
   if ( nrow(X)!=nrow(Y) ) stop("'X' and 'Y' have different number of data points.", call. = FALSE)
-  if ( isFALSE(reset)&ncol(X)!=ncol(object$data$X) ) stop("'X' and the training input of the DGP emulator must have same number of dimensions when 'reset = FALSE'.", call. = FALSE)
+  if ( isFALSE(reset)&ncol(X)!=ncol(object$data$X) ) stop("'X' and the training input of the DGP emulator must have the same number of dimensions when 'reset = FALSE'.", call. = FALSE)
 
   linked_idx <- object$container_obj$local_input_idx
 
@@ -125,11 +145,11 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
   new_object[['data']][['X']] <- unname(X)
   new_object[['data']][['Y']] <- unname(Y)
   new_object[['specs']] <- extract_specs(est_obj, "dgp")
-  if ("internal_dims" %in% names(object[['specs']])){
-    new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
-    new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
-  }
+  new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
+  new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
   new_object[['specs']][['linked_idx']] <- if ( is.null(linked_idx) ) FALSE else linked_idx_py_to_r(linked_idx)
+  new_object[['specs']][['vecchia']] <- object[['specs']][['vecchia']]
+  new_object[['specs']][['M']] <- object[['specs']][['M']]
   new_object[['constructor_obj']] <- constructor_obj_cp
   id <- sample.int(100000, 1)
   set_seed(id)
@@ -149,7 +169,7 @@ update.dgp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, 
 #' @rdname update
 #' @method update gp
 #' @export
-update.gp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, ...) {
+update.gp <- function(object, X, Y, refit = TRUE, reset = FALSE, verb = TRUE, ...) {
   if ( is.null(pkg.env$dgpsi) ) {
     init_py(verb = F)
     if (pkg.env$restart) return(invisible(NULL))
@@ -160,7 +180,13 @@ update.gp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, .
   }
   if ( !is.matrix(X)&!is.vector(X) ) stop("'X' must be a vector or a matrix.", call. = FALSE)
   if ( !is.matrix(Y)&!is.vector(Y) ) stop("'Y' must be a vector or a matrix.", call. = FALSE)
-  if ( is.vector(X) ) X <- as.matrix(X)
+  if ( is.vector(X) ) {
+    if ( ncol(object$data$X)!=1 ){
+      X <- matrix(X, nrow = 1)
+    } else {
+      X <- as.matrix(X)
+    }
+  }
   if ( is.vector(Y) ) Y <- as.matrix(Y)
 
   if ( nrow(X)!=nrow(Y) ) stop("'X' and 'Y' have different number of data points.", call. = FALSE)
@@ -194,11 +220,11 @@ update.gp <- function(object, X, Y, refit = FALSE, reset = FALSE, verb = TRUE, .
   new_object[['data']][['X']] <- unname(X)
   new_object[['data']][['Y']] <- unname(Y)
   new_object[['specs']] <- extract_specs(constructor_obj_cp, "gp")
-  if ("internal_dims" %in% names(object[['specs']])){
-    new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
-    new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
-  }
+  new_object[['specs']][['internal_dims']] <- object[['specs']][['internal_dims']]
+  new_object[['specs']][['external_dims']] <- object[['specs']][['external_dims']]
   new_object[['specs']][['linked_idx']] <- if ( is.null(linked_idx) ) FALSE else linked_idx_py_to_r(linked_idx)
+  new_object[['specs']][['vecchia']] <- object[['specs']][['vecchia']]
+  new_object[['specs']][['M']] <- object[['specs']][['M']]
   new_object[['constructor_obj']] <- constructor_obj_cp
   new_object[['container_obj']] <- pkg.env$dgpsi$container(constructor_obj_cp$export(), linked_idx)
   new_object[['emulator_obj']] <- constructor_obj_cp
